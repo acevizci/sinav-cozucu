@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Sınav Çözücü v3</title>
+
+  <script src="https://unpkg.com/mammoth/mammoth.browser.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+
+<body>
+
+<header>
+  <h1>📚 Sınav Çözücü</h1>
+  <div class="sub">Kişisel deneme alanın. Soruları yükle, çöz, analiz et.</div>
+</header>
+
+<main>
+
+  <section class="card panel-left">
+    
+    <div class="panel-header">
+      <h3>🎛 Kontrol Merkezi</h3>
+      <div class="pill mono" id="parseStatus">hazır</div>
+    </div>
+
+    <div class="input-group">
+      <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab('file')">📂 Dosya</button>
+        <button class="tab-btn" onclick="switchTab('text')">📋 Metin</button>
+      </div>
+
+      <div id="tab-file" class="tab-content active">
+        <label class="drop-zone">
+          <input id="fileInput" type="file" accept=".docx,.txt" hidden />
+          <div class="dz-icon">☁️</div>
+          <div class="dz-text">Dosyayı buraya bırak<br>veya <span class="lnk">seç</span></div>
+          <div class="dz-filename" id="fileNameDisplay"></div>
+        </label>
+      </div>
+
+      <div id="tab-text" class="tab-content" style="display:none;">
+        <textarea id="pasteArea" placeholder="Soruları buraya yapıştır..."></textarea>
+      </div>
+    </div>
+
+    <div class="settings-box">
+      <div class="setting-row">
+        <div class="inp-group">
+          <label>⏱ Süre (dk)</label>
+          <input id="durationMin" type="number" min="1" max="600" value="20">
+        </div>
+        <div class="toggles">
+          <label class="toggle" title="Focus Mod"><input id="focusMode" type="checkbox"> <span>Focus</span></label>
+          <label class="toggle" title="Otomatik Başlat"><input id="autoStart" type="checkbox" checked> <span>Oto.</span></label>
+        </div>
+      </div>
+      <div class="setting-row low-gap">
+        <label class="chk"><input id="shuffleQ" type="checkbox" checked> Soru Karıştır</label>
+        <label class="chk"><input id="shuffleO" type="checkbox" checked> Şık Karıştır</label>
+      </div>
+    </div>
+
+    <div class="main-actions">
+      <button id="btnStart" class="btn-lg primary" disabled>🚀 BAŞLAT</button>
+      <div class="sub-actions">
+        <button id="btnFinish" class="ok" disabled>✅ Bitir</button>
+        <button id="btnReset" class="bad">Sıfırla</button>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="tools-section">
+      <div class="sec-title">VERİ & ANALİZ</div>
+      <div class="tools-grid">
+        <button id="btnWrongMode">♻ Yanlışlar</button>
+        <button id="btnSrsDash">📅 SRS</button>
+        <button id="btnExportWrongBook">⬇ Hata Rap.</button>
+        <button id="btnExportCSV" disabled>⬇ CSV</button>
+      </div>
+      
+      <div class="mini-tools">
+        <button id="btnClearWrongBook" class="text-btn">Temizle: Yanlışlar</button>
+        <button id="btnClearSave" class="text-btn warn">Temizle: Kayıt</button>
+        <button id="btnExportJSON" class="text-btn" disabled>JSON İndir</button>
+      </div>
+    </div>
+
+    <div class="panel-timer">
+      <span class="muted">Kalan Süre:</span>
+      <span class="mono large" id="timer">--:--</span>
+    </div>
+
+  </section>
+
+
+  <section class="card">
+
+    <div class="between">
+      <div>
+        <h2 id="examTitle">Sınav</h2>
+        <div class="meta" id="examMeta">Henüz ayrıştırılmadı.</div>
+      </div>
+      <div class="row">
+        <span class="pill">Mod: <span id="modeLabel">Hazırlık</span></span>
+        <span class="pill">Anahtar: <span id="keyLabel">—</span></span>
+      </div>
+    </div>
+
+    <div class="toolbar" id="resultTools" style="display:none;">
+      <label class="pill"><input id="showOnlyWrong" type="checkbox"> Yanlışlar</label>
+      <label class="pill"><input id="showOnlyBlank" type="checkbox"> Boşlar</label>
+      <span class="sep"></span>
+      <span class="small">Navigasyondan soruya zıpla.</span>
+    </div>
+
+    <div class="layoutExam">
+      <div class="navPanel">
+        <div class="navHeader">📍 Navigasyon</div>
+        <div class="navGrid" id="navGrid"></div>
+      </div>
+
+      <div>
+        <div id="examArea">
+          <div class="hint">Sınav burada görünecek.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<script type="module" src="./js/app.js"></script>
+
+<script>
+  function switchTab(tab){
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    event.target.classList.add('active');
+    document.getElementById('tab-file').style.display = (tab === 'file') ? 'block' : 'none';
+    document.getElementById('tab-text').style.display = (tab === 'text') ? 'block' : 'none';
+  }
+
+  const fileInp = document.getElementById('fileInput');
+  if(fileInp){
+    fileInp.addEventListener('change', function(){
+      const name = this.files[0] ? this.files[0].name : '';
+      const display = document.getElementById('fileNameDisplay');
+      const label = document.querySelector('.dz-text');
+      if(name) {
+        display.textContent = name;
+        display.style.display = 'block';
+        if(label) label.style.display = 'none';
+      } else {
+        display.style.display = 'none';
+        if(label) label.style.display = 'block';
+      }
+    });
+  }
+</script>
+
+
+<div id="summaryModal" class="modalOverlay" style="display:none;" aria-hidden="true">
+  <div class="modalCard" role="dialog" aria-modal="true">
+    
+    <div class="modalTop">
+      <div>
+        <div id="summaryTitle" class="modalTitle">📊 Sınav Karnesi</div>
+        <div id="summarySub" class="modalSub">Performans analizi</div>
+      </div>
+      <button id="btnCloseSummary" class="modalClose">✕</button>
+    </div>
+
+    <div class="summaryLayout">
+      <div class="chartContainer">
+        <canvas id="summaryChart"></canvas>
+        <div class="chartCenter">
+          <div class="scoreVal" id="mScoreDisplay">0</div>
+          <div class="scoreLabel">PUAN</div>
+        </div>
+      </div>
+
+      <div class="summaryGrid">
+        <div class="statCard"><b id="mSumQ">0</b><span>Soru</span></div>
+        <div class="statCard"><b id="mSumA">0</b><span>Cevaplanan</span></div>
+        <div class="statCard ok"><b id="mSumC">0</b><span>Doğru</span></div>
+        <div class="statCard bad"><b id="mSumW">0</b><span>Yanlış</span></div>
+        <div class="statCard warn"><b id="mSumB">0</b><span>Boş</span></div>
+        <div class="statCard"><b id="mSumAvg">0sn</b><span>Ort. Süre</span></div>
+      </div>
+    </div>
+
+    <div class="summaryActions">
+      <div style="display:flex; gap:10px;">
+        <button id="btnRetryWrongs" class="warn" style="font-size:12px; display:none;">♻ Hataları Tekrarla</button>
+        <button id="btnReviewWrongs" class="bad" style="font-size:12px; display:none;">🔍 İncele</button>
+      </div>
+      <button id="btnOkSummary" class="primary">Tamam</button>
+    </div>
+
+  </div>
+</div>
+
+<div class="modalOverlay" id="srsModal" aria-hidden="true" style="display:none;">
+  <div class="modalCard">
+    <div class="modalTop">
+      <div class="modalTitle">📅 SRS Dashboard</div>
+      <button class="iconBtn" id="btnCloseSrs" title="Kapat">✕</button>
+    </div>
+    <div class="modalSub muted">Tekrar planın (SM-2)</div>
+    <div class="grid2" style="margin-top:12px;">
+      <div class="miniStat"><div class="k">Toplam</div><div class="v" id="srsTotal">0</div></div>
+      <div class="miniStat"><div class="k">Bugün</div><div class="v" id="srsDue">0</div></div>
+      <div class="miniStat"><div class="k">Yarın</div><div class="v" id="srsTomorrow">0</div></div>
+      <div class="miniStat"><div class="k">7 Gün</div><div class="v" id="srsNext7">0</div></div>
+      <div class="miniStat"><div class="k">Learning</div><div class="v" id="srsLearning">0</div></div>
+      <div class="miniStat"><div class="k">Mature</div><div class="v" id="srsMature">0</div></div>
+    </div>
+    <div class="divider"></div>
+    <div style="position: relative; height:200px; width:100%; margin-top:10px;">
+      <canvas id="srsChart"></canvas>
+    </div>
+    <div class="grid2" style="margin-top:10px;">
+      <div class="miniStat"><div class="k">Avg EF</div><div class="v mono" id="srsAvgEf">0.00</div></div>
+    </div>
+    <div class="modalActions">
+      <button id="btnOkSrs">Tamam</button>
+    </div>
+  </div>
+</div>
+
+<div id="loadingOverlay" class="loadingOverlay" style="display:none;" aria-hidden="true">
+  <div class="loadingCard">
+    <div class="spinner"></div>
+    <div class="loadingText">Ayrıştırılıyor…</div>
+  </div>
+</div>
+
+<div id="toastHost" class="toastHost" aria-live="polite" aria-atomic="true"></div>
+
+<div id="focusBar" class="focusBar" style="display:none;">
+  <span class="pill">⏳ <span class="mono" id="focusTimer">--:--</span></span>
+  <button id="btnFinishFocus" class="chip danger" style="display:inline-flex;">Sınavı Bitir</button>
+  <button id="btnExitFocus" class="ghost">Çık</button>
+</div>
+
+<div id="resumeModal" class="modalOverlay" style="display:none;" aria-hidden="true">
+  <div class="modalCard" role="dialog" aria-modal="true">
+    <div class="modalTop">
+      <div>
+        <div id="resumeTitle" class="modalTitle">⏯ Kaldığın yerden devam?</div>
+        <div id="resumeSub" class="modalSub">Daha önce yarım kalan bir sınav bulundu.</div>
+      </div>
+      <button id="btnCloseResume" class="modalClose">✕</button>
+    </div>
+    <div class="modalActions" style="justify-content:space-between;">
+      <button id="btnDiscardResume" class="bad">Sıfırla</button>
+      <button id="btnResume" class="primary">Devam et</button>
+    </div>
+  </div>
+</div>
+
+<div id="apiKeyModal" class="modalOverlay" style="display:none; z-index: 10000;">
+  <div class="modalCard" style="max-width: 400px;">
+    <div class="modalTop">
+      <h3>🔑 Gemini API Anahtarı</h3>
+    </div>
+    <div style="padding: 15px 0; color: #ccc; font-size: 14px; line-height: 1.5;">
+      Yapay zeka özelliklerini kullanmak için Google'dan aldığın ücretsiz API anahtarını girmen gerekiyor.
+      <br><br>
+      <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color: #a855f7; text-decoration: underline;">Anahtarı buradan alabilirsin ↗</a>
+    </div>
+    
+    <input type="text" id="inpApiKeyUi" placeholder="AIza... ile başlayan kodunu yapıştır" 
+           style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #444; background: #222; color: white; font-family: monospace; margin-bottom: 10px;">
+    
+    <div id="keyErrorUi" style="color: #ff453a; font-size: 13px; margin-bottom: 15px; display: none;">
+      ⚠️ Lütfen geçerli bir anahtar girin.
+    </div>
+
+    <div class="summaryActions" style="justify-content: flex-end; gap: 10px;">
+      <button id="btnCancelKeyUi" class="bad" style="background: transparent; border: 1px solid #444;">İptal</button>
+      <button id="btnSaveKeyUi" class="ok">Kaydet ve Devam Et</button>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
