@@ -1,3 +1,5 @@
+// js/ui.js - (FİNAL DÜZELTİLMİŞ SÜRÜM)
+
 // ================= IMPORTS =================
 import { el, escapeHtml } from "./utils.js";
 import { LETTERS_CONST, getCorrectDisplayLetter, getChosenOptionId } from "./shuffle.js";
@@ -49,14 +51,34 @@ export function setLoading(on, text="Ayrıştırılıyor…"){
   if (!ov) return;
   const t = ov.querySelector(".loadingText");
   if (t) t.textContent = text;
-  ov.style.display = on ? "flex" : "none";
-  ov.setAttribute("aria-hidden", on ? "false" : "true");
+  
+  if (on) {
+    ov.style.display = "flex";
+    ov.setAttribute("aria-hidden", "false");
+  } else {
+    ov.style.display = "none";
+    ov.setAttribute("aria-hidden", "true");
+  }
 }
 
 // ================= MODE UI =================
 export function updateModeUI(state, wrongStats){
   safeText("modeLabel", state.mode === "prep" ? "Hazırlık" : state.mode === "exam" ? "Sınav" : "Sonuç");
-  safeText("keyLabel", state.parsed ? (state.parsed.keyCount ? "var" : "yok") : "—");
+
+  // Key label: yok / kısmi / var / AI
+  if (!state.parsed){
+    safeText("keyLabel", "—");
+  } else {
+    const totalQ = state.parsed.questions?.length || 0;
+    const keyCount = state.parsed.keyCount || 0;
+    const cov = state.parsed.meta?.keyCoverage ?? (totalQ ? keyCount/totalQ : 0);
+    const src = state.parsed.meta?.keySource;
+
+    if (src === "ai") safeText("keyLabel", "AI");
+    else if (!keyCount) safeText("keyLabel", "yok");
+    else if (cov < 0.95) safeText("keyLabel", "kısmi");
+    else safeText("keyLabel", "var");
+  }
 
   const btn = (id, cond) => { const b=safe(id); if(b) b.disabled=!cond; };
   btn("btnStart", state.parsed && state.mode==="prep");
@@ -99,6 +121,490 @@ export function updateStats(state){
   safeText("kpiA", answered);
   safeText("kpiC", correctCount);
   safeText("kpiS", score);
+}
+
+// ================= AI: ÖZEL GİRİŞ PENCERESİ MANTIĞI =================
+function requestApiKeyFromModal() {
+  return new Promise((resolve) => {
+    const modal = document.getElementById("apiKeyModal");
+    const input = document.getElementById("inpApiKeyUi");
+    const errorBox = document.getElementById("keyErrorUi");
+    const btnSave = document.getElementById("btnSaveKeyUi");
+    const btnCancel = document.getElementById("btnCancelKeyUi");
+
+    // HTML'de modal yoksa (eski sürümse) prompt kullan
+    if (!modal || !input) {
+      const pKey = window.prompt("Lütfen Gemini API Anahtarınızı girin:\n(AIza... ile başlayan kod)");
+      resolve(pKey ? pKey.trim() : null);
+      return;
+    }
+
+    // Modalı Aç
+    modal.style.display = "flex";
+    modal.setAttribute("aria-hidden", "false"); // Erişilebilirlik
+    input.value = "";
+    input.style.borderColor = "#444";
+    if(errorBox) errorBox.style.display = "none";
+    input.focus();
+
+    const handleSave = () => {
+      const val = input.value.trim();
+      // Basit doğrulama
+      if (val.length > 20 && val.startsWith("AIza")) {
+        cleanup();
+        resolve(val);
+      } else {
+        if(errorBox) {
+          errorBox.textContent = "⚠️ Geçersiz anahtar! 'AIza' ile başlamalı.";
+          errorBox.style.display = "block";
+        }
+        input.style.borderColor = "#ff453a";
+        input.oninput = () => {
+             input.style.borderColor = "#444";
+             if(errorBox) errorBox.style.display = "none";
+        };
+      }
+    };
+
+    const handleCancel = () => {
+      cleanup();
+      resolve(null);
+    };
+
+    const handleEnter = (e) => {
+      if (e.key === "Enter") handleSave();
+    };
+
+    btnSave.onclick = handleSave;
+    btnCancel.onclick = handleCancel;
+    input.onkeydown = handleEnter;
+
+    function cleanup() {
+      modal.style.display = "none";
+      modal.setAttribute("aria-hidden", "true"); // Erişilebilirlik
+      btnSave.onclick = null;
+      btnCancel.onclick = null;
+      input.onkeydown = null;
+      if(input) input.oninput = null;
+    }
+  });
+}
+
+// ================= AI: ORTAK ÇAĞRI FONKSİYONU =================
+async function callGeminiApi(apiKey, promptText, onSuccess, onError) {
+  try {
+    // Otomatik Model Seçimi
+    let selectedModel = "models/gemini-1.5-flash"; 
+    try {
+        const listReq = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+        if(listReq.ok) {
+            const listData = await listReq.json();
+            const viableModels = (listData.models || []).filter(m => 
+                m.supportedGenerationMethods && 
+                m.supportedGenerationMethods.includes("generateContent")
+            );
+            // Flash > Pro sıralaması
+            const bestModel = viableModels.find(m => m.name.includes("flash")) || 
+                              viableModels.find(m => m.name.includes("pro")) ||
+                              viableModels[0];
+            if (bestModel) selectedModel = bestModel.name;
+        }
+    } catch (e) {
+        console.warn("Model listesi alınamadı, varsayılan kullanılıyor:", e);
+    }
+
+    // İstek At
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/${selectedModel}:generateContent?key=${apiKey}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ contents: [{ parts: [{ text: promptText }] }] })
+    });
+
+    if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.error?.message || response.statusText);
+    }
+
+    const data = await response.json();
+    if(!data.candidates || data.candidates.length === 0) {
+        throw new Error("Model boş cevap döndürdü.");
+    }
+    
+    onSuccess(data.candidates[0].content.parts[0].text);
+
+  } catch (err) {
+    console.error("Gemini Hatası:", err);
+    onError(err);
+  }
+}
+
+function renderGeminiError(container, err) {
+  container.innerHTML = `
+    <div style="color:#ef4444; font-size:12px; border:1px solid #ef4444; padding:8px; border-radius:6px; background:rgba(239,68,68,0.1);">
+      <strong>⚠️ Hata:</strong> ${err.message}<br><br>
+      <button onclick="localStorage.removeItem('GEMINI_KEY'); this.parentElement.innerHTML='Anahtar silindi. Tekrar deneyin.';" style="background:#ef4444; color:white; border:none; padding:4px 8px; border-radius:4px; cursor:pointer;">
+        Anahtarı Sil ve Tekrar Dene
+      </button>
+    </div>
+  `;
+}
+
+// ================= AI 0: CEVAP ANAHTARI ÜRETİMİ (Mod A) =================
+// parsed: applyShuffle sonrası (display A-E). Dönen anahtar: displayN -> correctOptionId
+export async function generateAnswerKeyWithGemini(parsed, { limit=80, batchSize=10 } = {}) {
+  if (!parsed || !Array.isArray(parsed.questions) || !parsed.questions.length) {
+    throw new Error("AI anahtar üretimi için soru bulunamadı.");
+  }
+
+  let apiKey = localStorage.getItem("GEMINI_KEY");
+  if (!apiKey) {
+    apiKey = await requestApiKeyFromModal();
+    if (!apiKey) throw new Error("Gemini API anahtarı girilmedi.");
+    localStorage.setItem("GEMINI_KEY", apiKey);
+  }
+
+  const qList = parsed.questions.slice(0, Math.max(1, limit));
+  const outKey = {};
+
+  const call = (promptText) => new Promise((resolve, reject) => {
+    callGeminiApi(apiKey, promptText, resolve, reject);
+  });
+
+  const buildPrompt = (batch) => {
+    const items = batch.map(q => {
+      const A = q.optionsByLetter?.A?.text || "";
+      const B = q.optionsByLetter?.B?.text || "";
+      const C = q.optionsByLetter?.C?.text || "";
+      const D = q.optionsByLetter?.D?.text || "";
+      const E = q.optionsByLetter?.E?.text || "";
+      return {
+        n: q.n,
+        text: (q.text || "").slice(0, 1200),
+        options: {
+          A: String(A).slice(0, 600),
+          B: String(B).slice(0, 600),
+          C: String(C).slice(0, 600),
+          D: String(D).slice(0, 600),
+          E: String(E).slice(0, 600),
+        }
+      };
+    });
+
+    return [
+      `Sen çoktan seçmeli sınav çözücüsün.`,
+      `Her soru için yalnızca A/B/C/D/E harfi döndür.`,
+      `Emin değilsen null döndür (uydurma).`,
+      `ÇIKTI SADECE JSON olacak. Açıklama yazma.`,
+      `Beklenen format: {"1":"B","2":null,"3":"D"} (anahtarlar soru numarası, değerler A-E veya null)`,
+      `Sorular:`,
+      JSON.stringify(items, null, 2)
+    ].join("\n");
+  };
+
+  for (let i = 0; i < qList.length; i += batchSize) {
+    const batch = qList.slice(i, i + batchSize);
+    const promptText = buildPrompt(batch);
+    const raw = await call(promptText);
+
+    const cleaned = String(raw || "")
+      .replace(/^```(?:json)?/i, "")
+      .replace(/```\s*$/i, "")
+      .trim();
+
+    let obj;
+    try { obj = JSON.parse(cleaned); }
+    catch {
+      const m = cleaned.match(/\{[\s\S]*\}/);
+      if (!m) throw new Error("AI çıktısı JSON değil.");
+      obj = JSON.parse(m[0]);
+    }
+
+    for (const q of batch) {
+      const v = obj?.[String(q.n)] ?? obj?.[q.n];
+      if (!v) continue;
+      const letter = String(v).trim().toUpperCase();
+      if (!["A","B","C","D","E"].includes(letter)) continue;
+
+      // AI display harfi verdi: gerçek optionId'ye çevir (shuffle varsa şart)
+      const optId = (q.optionsByLetter?.[letter]?.id || "").toUpperCase();
+      if (optId) outKey[q.n] = optId;
+    }
+  }
+
+  return outKey;
+}
+
+
+// ================= AI 1: SORU AÇIKLAYICI (EXPLAINER) =================
+export async function runGeminiAnalysis(qN) {
+  const box = document.getElementById(`ai-box-${qN}`);
+  if (!box) return;
+
+  let apiKey = localStorage.getItem("GEMINI_KEY");
+  if (!apiKey) {
+    apiKey = await requestApiKeyFromModal();
+    if (!apiKey) return;
+    localStorage.setItem("GEMINI_KEY", apiKey);
+  }
+
+  box.style.display = "block";
+  box.innerHTML = `<div class="ai-loading" style="color:#a855f7">✨ Gemini soruyu inceliyor...</div>`;
+  
+  const state = window.__APP_STATE;
+  if (!state || !state.parsed) { box.innerHTML="<span style='color:red'>Hata: Veri yok.</span>"; return; }
+  const q = state.parsed.questions.find(x => x.n === qN);
+  const correctId = state.parsed.answerKey[qN];
+  
+  let correctText = "Belirtilmemiş";
+  let correctLetter = "";
+  if (q.optionsByLetter) {
+    for (let [L, opt] of Object.entries(q.optionsByLetter)) {
+      if (opt.id === correctId) {
+        correctText = opt.text;
+        correctLetter = L;
+      }
+    }
+  }
+
+  const aiPrompt = `
+    Öğretmen gibi davran. Aşağıdaki test sorusunu analiz et.
+    SORU: ${q.text}
+    DOĞRU CEVAP: (${correctLetter}) ${correctText}
+    GÖREV:
+    1. Bu cevabın neden doğru olduğunu açıkla.
+    2. Çeldiricilerin neden yanlış olduğunu kısaca belirt.
+    3. Kısa ve samimi ol. Türkçe cevap ver.
+  `;
+
+  await callGeminiApi(apiKey, aiPrompt, (text) => {
+    const formatted = text.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>").replace(/\n/g, "<br>");
+    box.innerHTML = `<strong>🤖 Gemini Açıklaması:</strong><br><br>${formatted}`;
+  }, (err) => {
+    renderGeminiError(box, err);
+  });
+}
+
+// ================= AI 2: BENZER SORU ÜRETİCİ (GENERATOR) =================
+export async function runGeminiGenerator(qN) {
+  const box = document.getElementById(`ai-gen-box-${qN}`);
+  if (!box) return;
+
+  let apiKey = localStorage.getItem("GEMINI_KEY");
+  if (!apiKey) {
+    apiKey = await requestApiKeyFromModal();
+    if (!apiKey) return;
+    localStorage.setItem("GEMINI_KEY", apiKey);
+  }
+
+  box.style.display = "block";
+  box.innerHTML = `<div class="ai-loading" style="color:#f59e0b">♻️ Yapay zeka benzer bir soru üretiyor...</div>`;
+
+  const state = window.__APP_STATE;
+  const q = state.parsed.questions.find(x => x.n === qN);
+  
+  const aiPrompt = `
+    Sen profesyonel bir soru yazarısın. Aşağıdaki soruya BENZER mantıkta, aynı zorlukta ama farklı değerler veya senaryo içeren YENİ bir soru üret.
+    
+    REFERANS SORU: ${q.text}
+    
+    ÇIKTI FORMATI (Sadece saf JSON ver, markdown yok):
+    {
+      "question": "Soru metni buraya",
+      "options": {"A": "Şık A", "B": "Şık B", "C": "Şık C", "D": "Şık D", "E": "Şık E"},
+      "correct": "A",
+      "explanation": "Cevabın neden A olduğuna dair kısa açıklama."
+    }
+  `;
+
+  await callGeminiApi(apiKey, aiPrompt, (text) => {
+    try {
+      let jsonStr = text.replace(/```json/g, "").replace(/```/g, "").trim();
+      const data = JSON.parse(jsonStr);
+      renderChallengeBox(box, data);
+    } catch (e) {
+      console.error(e);
+      box.innerHTML = `<div style="color:#ef4444">Veri işlenirken hata oluştu. Lütfen tekrar dene.</div>`;
+    }
+  }, (err) => {
+    renderGeminiError(box, err);
+  });
+}
+
+function renderChallengeBox(container, data) {
+  container.innerHTML = `
+    <div class="ai-challenge-header">🤖 AI Meydan Okuması</div>
+    <div class="ai-new-q-text">${escapeHtml(data.question)}</div>
+    <div class="ai-opts-area"></div>
+    <div class="ai-explanation" id="exp-${Math.random().toString(36).substr(2,9)}">${escapeHtml(data.explanation)}</div>
+  `;
+
+  const optsArea = container.querySelector(".ai-opts-area");
+  const expBox = container.querySelector(".ai-explanation");
+  
+  Object.entries(data.options).forEach(([letter, text]) => {
+    const btn = document.createElement("button");
+    btn.className = "ai-opt-btn";
+    btn.innerHTML = `<b>${letter})</b> ${escapeHtml(text)}`;
+    
+    btn.onclick = () => {
+      const allBtns = optsArea.querySelectorAll(".ai-opt-btn");
+      allBtns.forEach(b => b.classList.add("disabled"));
+      
+      if (letter === data.correct) {
+        btn.classList.add("correct");
+        showToast({ title:"Tebrikler!", msg:"Doğru cevap!", kind:"ok" });
+      } else {
+        btn.classList.add("wrong");
+        allBtns.forEach(b => {
+          if (b.innerHTML.includes(`<b>${data.correct})</b>`)) b.classList.add("correct");
+        });
+        showToast({ title:"Yanlış", msg:"Doğru cevap işaretlendi.", kind:"warn" });
+      }
+      expBox.style.display = "block";
+    };
+    optsArea.appendChild(btn);
+  });
+}
+
+// ================= EXAM RENDER =================
+function shouldShowQuestion(state, qN){
+  if (state.mode!=="result") return true;
+  const onlyWrong = safe("showOnlyWrong")?.checked;
+  const onlyBlank = safe("showOnlyBlank")?.checked;
+  const chosen = state.answers.get(qN);
+  const q = state.parsed.questions.find(x=>x.n===qN);
+  const correctId = state.parsed.answerKey[qN];
+
+  if (onlyBlank && chosen) return false;
+  if (onlyWrong){
+    if (!chosen || !correctId) return false;
+    const chosenId = q ? getChosenOptionId(q, chosen) : null;
+    return chosenId && chosenId !== correctId;
+  }
+  return true;
+}
+
+export function renderExam(state){
+  window.__APP_STATE = state;
+
+  const area = safe("examArea");
+  if (!area) return;
+  area.innerHTML = "";
+
+  if (!state.parsed){
+    area.innerHTML = `<div class="hint">Sınav burada görünecek.</div>`;
+    safeText("examTitle","Sınav");
+    safeText("examMeta","Henüz ayrıştırılmadı.");
+    return;
+  }
+
+  safeText("examTitle", state.parsed.title);
+  safeText("examMeta", `${state.parsed.questions.length} soru • Anahtar: ${state.parsed.keyCount||0}`);
+
+  for (const q of state.parsed.questions){
+    if (!shouldShowQuestion(state, q.n)) continue;
+
+    const chosen = state.answers.get(q.n);
+    const correctId = state.parsed.answerKey[q.n];
+    const correctLetter = correctId ? getCorrectDisplayLetter(q, correctId) : null;
+    const chosenId = q ? getChosenOptionId(q, chosen) : null;
+
+    let badge = `<span class="badge">Soru</span>`;
+    if (state.mode==="exam") badge = chosen ? `<span class="badge warn">İşaretli</span>` : `<span class="badge">Boş</span>`;
+    if (state.mode==="result"){
+      if (!correctId) badge=`<span class="badge">Anahtar yok</span>`;
+      else if (chosen===correctLetter) badge=`<span class="badge ok">Doğru</span>`;
+      else if (!chosen) badge=`<span class="badge warn">Boş</span>`;
+      else badge=`<span class="badge bad">Yanlış</span>`;
+    }
+
+    // AI Butonları
+    let aiBtnsHtml = "";
+    const showAi = (state.mode === "result" && correctId && chosenId !== correctId);
+    if (showAi) {
+      aiBtnsHtml = `
+        <button class="btn-ai-explain ai-explain-trigger" data-qn="${q.n}">✨ Neden?</button>
+        <button class="btn-ai-similar ai-gen-trigger" data-qn="${q.n}">♻️ Benzer Soru Üret</button>
+      `;
+    }
+
+    const qDiv = document.createElement("div");
+    qDiv.className="q";
+    qDiv.dataset.q=q.n;
+    qDiv.innerHTML=`
+      <div class="qTop">
+        <div class="qNum">${q.n}.</div>
+        <div style="display:flex; align-items:center;">
+          ${badge}
+          ${aiBtnsHtml}
+        </div>
+      </div>
+      <div class="qText">${q.text}</div>
+      <div class="opts"></div>
+      <div id="ai-box-${q.n}" class="ai-box"></div>
+      <div id="ai-gen-box-${q.n}" class="ai-challenge-box" style="display:none"></div>
+    `;
+
+    // Click Event Bağla
+    if (showAi) {
+        const expBtn = qDiv.querySelector('.ai-explain-trigger');
+        if (expBtn) expBtn.addEventListener('click', (e) => runGeminiAnalysis(parseInt(e.target.dataset.qn)));
+        
+        const genBtn = qDiv.querySelector('.ai-gen-trigger');
+        if (genBtn) genBtn.addEventListener('click', (e) => runGeminiGenerator(parseInt(e.target.dataset.qn)));
+    }
+
+    const opts = qDiv.querySelector(".opts");
+    for (const L of LETTERS_CONST){
+      const opt = q.optionsByLetter?.[L];
+      const text = (opt?.text||"").trim();
+      if (!text) continue;
+
+      const label=document.createElement("label");
+      label.className="opt";
+      if (state.mode==="result" && correctLetter){
+        if (L===correctLetter) label.classList.add("correct");
+        if (L===chosen && L!==correctLetter) label.classList.add("wrong");
+      }
+      label.innerHTML=`
+        <input type="radio" name="q${q.n}" value="${L}" ${chosen===L?"checked":""} ${state.mode!=="exam"?"disabled":""}>
+        <div><b>${L})</b> ${text}</div>
+      `;
+      opts.appendChild(label);
+    }
+    
+    // SRS Widget
+    if (state.mode==="result" && state.srsReview){
+      const info = state.srsInfo?.[q.n] || null;
+      const srsWrap = document.createElement("div");
+      srsWrap.className = "srsWrap";
+      srsWrap.dataset.q = q.n;
+
+      if (!hasKey){
+        srsWrap.innerHTML = `<div class="srsLine muted">SRS: Anahtar yok</div>`;
+      } else if (!chosen){
+        srsWrap.innerHTML = `<div class="srsLine">SRS: Boş → yarın tekrar</div>`;
+      } else if (!isCorrectNow){
+        srsWrap.innerHTML = `<div class="srsLine">SRS: Yanlış → yarın tekrar</div>`;
+      } else {
+        const dueTxt = info?.due ? new Date(info.due).toLocaleDateString("tr-TR") : "—";
+        const meta = info ? `EF ${info.ef.toFixed(2)} • ${info.interval}g • ${dueTxt}` : "—";
+        srsWrap.innerHTML = `
+          <div class="srsLine">
+            <span><b>SRS</b> • ${meta}</span>
+            <span class="srsBtns">
+              <button class="srsBtn" data-quality="3">Zor</button>
+              <button class="srsBtn" data-quality="4">Orta</button>
+              <button class="srsBtn" data-quality="5">Kolay</button>
+            </span>
+          </div>
+          <div class="srsHint muted">Bu sorunun tekrar aralığını seç.</div>
+        `;
+      }
+      qDiv.appendChild(srsWrap);
+    }
+    area.appendChild(qDiv);
+  }
 }
 
 // ================= NAVIGATION =================
@@ -172,330 +678,6 @@ export function refreshNavColors(state) {
       if (myAns) btn.classList.add("answered");
     }
   });
-}
-
-// ================= AI (GEMINI) ÖZEL GİRİŞ PENCERESİ MANTIĞI =================
-function requestApiKeyFromModal() {
-  return new Promise((resolve) => {
-    const modal = document.getElementById("apiKeyModal");
-    const input = document.getElementById("inpApiKeyUi");
-    const errorBox = document.getElementById("keyErrorUi"); // YENİ
-    const btnSave = document.getElementById("btnSaveKeyUi");
-    const btnCancel = document.getElementById("btnCancelKeyUi");
-
-    // Modal HTML'de yoksa (eski index.html varsa) fallback yap
-    if (!modal || !input) {
-      const pKey = window.prompt("Lütfen Gemini API Anahtarınızı girin:\n(AIza... ile başlayan kod)");
-      resolve(pKey ? pKey.trim() : null);
-      return;
-    }
-
-    // Modalı Aç ve Temizle
-    modal.style.display = "flex";
-    input.value = "";
-    input.style.borderColor = "#444"; // Kenarlığı sıfırla
-    if(errorBox) errorBox.style.display = "none"; // Hatayı gizle
-    input.focus();
-
-    // Kaydetme Mantığı
-    const handleSave = () => {
-      const val = input.value.trim();
-      
-      // Basit doğrulama (AIza... genelde 39 karakterdir, biz 20 diyelim)
-      if (val.length > 20 && val.startsWith("AIza")) {
-        cleanup();
-        resolve(val);
-      } else {
-        // HATA DURUMU: Alert yerine UI güncellemesi
-        if(errorBox) {
-          errorBox.textContent = "⚠️ Geçersiz anahtar! 'AIza' ile başlamalı.";
-          errorBox.style.display = "block";
-        }
-        input.style.borderColor = "#ff453a"; // Çerçeveyi kırmızı yap
-        
-        // Kullanıcı tekrar yazmaya başlarsa hatayı sil
-        input.oninput = () => {
-             input.style.borderColor = "#444";
-             if(errorBox) errorBox.style.display = "none";
-        };
-      }
-    };
-
-    const handleCancel = () => {
-      cleanup();
-      resolve(null);
-    };
-
-    const handleEnter = (e) => {
-      if (e.key === "Enter") handleSave();
-    };
-
-    btnSave.onclick = handleSave;
-    btnCancel.onclick = handleCancel;
-    input.onkeydown = handleEnter;
-
-    function cleanup() {
-      modal.style.display = "none";
-      btnSave.onclick = null;
-      btnCancel.onclick = null;
-      input.onkeydown = null;
-      if(input) input.oninput = null;
-    }
-  });
-}
-
-// ================= AI (GEMINI) FONKSİYONU (GÜNCELLENMİŞ) =================
-async function runGeminiAnalysis(qN) {
-  const box = document.getElementById(`ai-box-${qN}`);
-  if (!box) return;
-
-  // 1. API Key Kontrolü (MODAL İLE)
-  let apiKey = localStorage.getItem("GEMINI_KEY");
-  
-  if (!apiKey) {
-    apiKey = await requestApiKeyFromModal();
-    if (!apiKey) return; // İptal edildi
-    localStorage.setItem("GEMINI_KEY", apiKey);
-  }
-
-  // 2. UI Hazırla
-  box.style.display = "block";
-  box.innerHTML = `<div class="ai-loading" style="color:#a855f7">✨ Uygun model aranıyor ve soru inceleniyor...</div>`;
-  
-  // 3. Veriyi Çek
-  const state = window.__APP_STATE;
-  if (!state || !state.parsed) { 
-      box.innerHTML="<span style='color:red'>Hata: Sınav verisi okunamadı.</span>"; return; 
-  }
-  
-  const q = state.parsed.questions.find(x => x.n === qN);
-  const correctId = state.parsed.answerKey[qN];
-  
-  let correctText = "Belirtilmemiş";
-  let correctLetter = "";
-  if (q.optionsByLetter) {
-    for (let [L, opt] of Object.entries(q.optionsByLetter)) {
-      if (opt.id === correctId) {
-        correctText = opt.text;
-        correctLetter = L;
-      }
-    }
-  }
-
-  // 4. Prompt Hazırla
-  const aiPrompt = `
-    Sen bir öğretmensin. Aşağıdaki test sorusunu analiz et.
-    SORU: ${q.text}
-    DOĞRU CEVAP: (${correctLetter}) ${correctText}
-    GÖREV:
-    1. Bu cevabın neden doğru olduğunu 1-2 cümleyle açıkla.
-    2. Çeldiricilerin neden yanlış olduğuna kısaca değin.
-    3. Kısa, eğitici ve samimi ol. Türkçe cevap ver.
-  `;
-
-  try {
-    // --- ADIM 5: DOĞRU MODELİ OTOMATİK BUL ---
-    let selectedModel = "models/gemini-1.5-flash"; 
-
-    try {
-        const listReq = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
-        if(listReq.ok) {
-            const listData = await listReq.json();
-            const viableModels = (listData.models || []).filter(m => 
-                m.supportedGenerationMethods && 
-                m.supportedGenerationMethods.includes("generateContent")
-            );
-
-            // Flash > Pro sıralaması
-            const bestModel = viableModels.find(m => m.name.includes("flash")) || 
-                              viableModels.find(m => m.name.includes("pro")) ||
-                              viableModels[0];
-            
-            if (bestModel) {
-                console.log("Seçilen Model:", bestModel.name);
-                selectedModel = bestModel.name;
-            }
-        }
-    } catch (e) {
-        console.warn("Model listesi alınamadı, varsayılan deneniyor:", e);
-    }
-
-    // --- ADIM 6: CEVAP ÜRET ---
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/${selectedModel}:generateContent?key=${apiKey}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contents: [{ parts: [{ text: aiPrompt }] }] })
-    });
-
-    if (!response.ok) {
-        const errData = await response.json();
-        throw new Error(errData.error?.message || response.statusText);
-    }
-
-    const data = await response.json();
-    
-    if(!data.candidates || data.candidates.length === 0) {
-        throw new Error("Model boş cevap döndürdü.");
-    }
-
-    const aiText = data.candidates[0].content.parts[0].text;
-    const formattedText = aiText
-      .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
-      .replace(/\n/g, "<br>");
-
-    box.innerHTML = `<strong>🤖 Gemini Açıklaması (${selectedModel.replace('models/', '')}):</strong><br><br>${formattedText}`;
-
-  } catch (err) {
-    console.error("Gemini Hatası:", err);
-    box.innerHTML = `
-      <div style="color:#ef4444; font-size:12px; border:1px solid #ef4444; padding:8px; border-radius:6px; background:rgba(239,68,68,0.1);">
-        <strong>⚠️ Hata:</strong> ${err.message}<br><br>
-        <button onclick="localStorage.removeItem('GEMINI_KEY'); this.parentElement.innerHTML='Anahtar silindi. Tekrar deneyin.';" style="background:#ef4444; color:white; border:none; padding:4px 8px; border-radius:4px; cursor:pointer;">
-          Anahtarı Sil ve Tekrar Dene
-        </button>
-      </div>
-    `;
-  }
-}
-
-// ================= EXAM RENDER =================
-function shouldShowQuestion(state, qN){
-  if (state.mode!=="result") return true;
-  const onlyWrong = safe("showOnlyWrong")?.checked;
-  const onlyBlank = safe("showOnlyBlank")?.checked;
-  const chosen = state.answers.get(qN);
-  const q = state.parsed.questions.find(x=>x.n===qN);
-  const correctId = state.parsed.answerKey[qN];
-
-  if (onlyBlank && chosen) return false;
-  if (onlyWrong){
-    if (!chosen || !correctId) return false;
-    const chosenId = q ? getChosenOptionId(q, chosen) : null;
-    return chosenId && chosenId !== correctId;
-  }
-  return true;
-}
-
-export function renderExam(state){
-  // State'i global değişkene ata (Retry ve AI için)
-  window.__APP_STATE = state;
-
-  const area = safe("examArea");
-  if (!area) return;
-  area.innerHTML = "";
-
-  if (!state.parsed){
-    area.innerHTML = `<div class="hint">Sınav burada görünecek.</div>`;
-    safeText("examTitle","Sınav");
-    safeText("examMeta","Henüz ayrıştırılmadı.");
-    return;
-  }
-
-  safeText("examTitle", state.parsed.title);
-  safeText("examMeta", `${state.parsed.questions.length} soru • Anahtar: ${state.parsed.keyCount||0}`);
-
-  for (const q of state.parsed.questions){
-    if (!shouldShowQuestion(state, q.n)) continue;
-
-    const chosen = state.answers.get(q.n);
-    const correctId = state.parsed.answerKey[q.n];
-    const correctLetter = correctId ? getCorrectDisplayLetter(q, correctId) : null;
-    const chosenId = q ? getChosenOptionId(q, chosen) : null;
-
-    let badge = `<span class="badge">Soru</span>`;
-    if (state.mode==="exam") badge = chosen ? `<span class="badge warn">İşaretli</span>` : `<span class="badge">Boş</span>`;
-    if (state.mode==="result"){
-      if (!correctId) badge=`<span class="badge">Anahtar yok</span>`;
-      else if (chosen===correctLetter) badge=`<span class="badge ok">Doğru</span>`;
-      else if (!chosen) badge=`<span class="badge warn">Boş</span>`;
-      else badge=`<span class="badge bad">Yanlış</span>`;
-    }
-
-    // Buton HTML
-    let aiBtnHtml = "";
-    const showAiBtn = (state.mode === "result" && correctId && chosenId !== correctId);
-    if (showAiBtn) {
-      aiBtnHtml = `<button class="btn-ai-explain ai-trigger" data-qn="${q.n}">✨ Neden?</button>`;
-    }
-
-    const qDiv = document.createElement("div");
-    qDiv.className="q";
-    qDiv.dataset.q=q.n;
-    qDiv.innerHTML=`
-      <div class="qTop">
-        <div class="qNum">${q.n}.</div>
-        <div style="display:flex; align-items:center;">
-          ${badge}
-          ${aiBtnHtml}
-        </div>
-      </div>
-      <div class="qText">${q.text}</div> <div class="opts"></div>
-      <div id="ai-box-${q.n}" class="ai-box"></div>
-    `;
-
-    // Click Event Bağla
-    if (showAiBtn) {
-        const aiBtn = qDiv.querySelector('.ai-trigger');
-        if (aiBtn) {
-            aiBtn.addEventListener('click', (e) => {
-                const qNum = parseInt(e.target.dataset.qn);
-                runGeminiAnalysis(qNum);
-            });
-        }
-    }
-
-    const opts = qDiv.querySelector(".opts");
-    for (const L of LETTERS_CONST){
-      const opt = q.optionsByLetter?.[L];
-      const text = (opt?.text||"").trim();
-      if (!text) continue;
-
-      const label=document.createElement("label");
-      label.className="opt";
-      if (state.mode==="result" && correctLetter){
-        if (L===correctLetter) label.classList.add("correct");
-        if (L===chosen && L!==correctLetter) label.classList.add("wrong");
-      }
-      label.innerHTML=`
-        <input type="radio" name="q${q.n}" value="${L}" ${chosen===L?"checked":""} ${state.mode!=="exam"?"disabled":""}>
-        <div><b>${L})</b> ${text}</div> `;
-      opts.appendChild(label);
-    }
-    
-    // SRS Widget
-    if (state.mode==="result" && state.srsReview){
-      const info = state.srsInfo?.[q.n] || null;
-      const hasKey = !!correctId;
-      const isCorrectNow = hasKey && chosen && correctLetter && chosen===correctLetter;
-      const srsWrap = document.createElement("div");
-      srsWrap.className = "srsWrap";
-      srsWrap.dataset.q = q.n;
-
-      if (!hasKey){
-        srsWrap.innerHTML = `<div class="srsLine muted">SRS: Anahtar yok</div>`;
-      } else if (!chosen){
-        srsWrap.innerHTML = `<div class="srsLine">SRS: Boş → yarın tekrar</div>`;
-      } else if (!isCorrectNow){
-        srsWrap.innerHTML = `<div class="srsLine">SRS: Yanlış → yarın tekrar</div>`;
-      } else {
-        const dueTxt = info?.due ? new Date(info.due).toLocaleDateString("tr-TR") : "—";
-        const meta = info ? `EF ${info.ef.toFixed(2)} • ${info.interval}g • ${dueTxt}` : "—";
-        srsWrap.innerHTML = `
-          <div class="srsLine">
-            <span><b>SRS</b> • ${meta}</span>
-            <span class="srsBtns">
-              <button class="srsBtn" data-quality="3">Zor</button>
-              <button class="srsBtn" data-quality="4">Orta</button>
-              <button class="srsBtn" data-quality="5">Kolay</button>
-            </span>
-          </div>
-          <div class="srsHint muted">Bu sorunun tekrar aralığını seç.</div>
-        `;
-      }
-      qDiv.appendChild(srsWrap);
-    }
-    area.appendChild(qDiv);
-  }
 }
 
 // ================= KEYBOARD =================
@@ -636,6 +818,7 @@ export function openSummaryModal({ total, answered, correct, score, wrong=0, bla
           alert("Tekrarlanacak yanlış soru bulunamadı."); return;
         }
 
+        // Yeni state hazırla
         state.parsed.questions = wrongQuestions;
         state.answers = new Map();
         state.mode = "exam";
@@ -668,59 +851,168 @@ export function openSummaryModal({ total, answered, correct, score, wrong=0, bla
 
 export function closeSummaryModal(){
   const overlay = document.getElementById("summaryModal");
-  if (overlay){ overlay.style.display = "none"; overlay.setAttribute("aria-hidden","true"); }
+  if (overlay){ 
+    overlay.style.display = "none"; 
+    overlay.setAttribute("aria-hidden","true");
+  }
 }
 
-// ================= SRS MODAL =================
+// ================= SRS MODAL (GELİŞMİŞ & TÜRKÇE) =================
 let srsChartInstance = null;
-export function openSrsModal(data){
+
+export function openSrsModal(data) {
   const overlay = document.getElementById("srsModal");
   if (!overlay) return;
-  const set = (id, v) => { const e=document.getElementById(id); if(e) e.textContent = String(v ?? 0); };
+
+  // 1. HTML Şablonunu Oluştur (Türkçe ve İkonlu)
+  const template = `
+    <div class="modalCard">
+      <div class="modalTop">
+        <div>
+          <div class="modalTitle">🧠 Hafıza Analizi</div>
+          <div class="modalSub">Aralıklı Tekrar (SM-2) İstatistikleri</div>
+        </div>
+        <button id="btnCloseSrsInternal" class="modalClose">✕</button>
+      </div>
+
+      <div class="srs-grid">
+        <div class="srs-card highlight">
+          <div class="srs-val" id="srsTotal">-</div>
+          <div class="srs-label">📂 Toplam Soru</div>
+        </div>
+        <div class="srs-card urgent">
+          <div class="srs-val" id="srsDue">-</div>
+          <div class="srs-label">🔥 Bugün Çözülecek</div>
+        </div>
+        <div class="srs-card">
+          <div class="srs-val" id="srsTomorrow">-</div>
+          <div class="srs-label">📅 Yarına Kalan</div>
+        </div>
+        <div class="srs-card">
+          <div class="srs-val" id="srsAvgEf">-</div>
+          <div class="srs-label">⚡ Ort. Kolaylık (EF)</div>
+        </div>
+        <div class="srs-card">
+          <div class="srs-val" id="srsLearning">-</div>
+          <div class="srs-label">🌱 Öğrenme Aşamasında</div>
+        </div>
+        <div class="srs-card good">
+          <div class="srs-val" id="srsMature">-</div>
+          <div class="srs-label">🧠 Kalıcı Hafıza</div>
+        </div>
+      </div>
+
+      <div class="chart-wrapper">
+        <canvas id="srsChart"></canvas>
+      </div>
+
+      <div class="modalActions">
+        <button id="btnOkSrsInternal" class="primary">Tamam</button>
+      </div>
+    </div>
+  `;
+
+  // HTML'i bas
+  overlay.innerHTML = template;
+
+  // 2. Verileri Doldur
+  const set = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = String(v ?? 0); };
+  
   set("srsTotal", data?.total ?? 0);
   set("srsDue", data?.dueToday ?? data?.due ?? 0);
   set("srsTomorrow", data?.dueTomorrow ?? 0);
-  set("srsNext7", data?.dueNext7 ?? 0);
   set("srsLearning", data?.learning ?? 0);
   set("srsMature", data?.mature ?? 0);
+  
   const efEl = document.getElementById("srsAvgEf");
-  if (efEl) efEl.textContent = (data?.avgEf ?? 0).toFixed(2);
+  if (efEl) efEl.textContent = (data?.avgEf ?? 2.5).toFixed(2);
 
+  // 3. Grafiği Çiz
   const ctx = document.getElementById('srsChart');
   if (ctx && window.Chart) {
     if (srsChartInstance) srsChartInstance.destroy();
+    
     const b = data?.buckets || {};
+    
+    // Tema Rengi Kontrolü (Grafik yazıları için)
+    const isLight = document.body.classList.contains("light-mode") || document.body.classList.contains("sepia-mode");
+    const textColor = isLight ? '#666' : '#aaa';
+    const gridColor = isLight ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.05)';
+
     srsChartInstance = new Chart(ctx, {
       type: 'bar',
       data: {
-        labels: ["Yeni", "L1", "L2", "L3", "Uzman"],
+        labels: ["Yeni", "Başlangıç", "Gelişiyor", "İyi", "Uzman"],
         datasets: [{
-          label: 'Soru',
+          label: 'Soru Sayısı',
           data: [b["0"]||0, b["1"]||0, b["2"]||0, b["3"]||0, b["4+"]||0],
-          backgroundColor: ['#ff453a','#ff9f0a','#ffd60a','#34c759','#0a84ff']
+          backgroundColor: [
+            '#ef4444', // Yeni (Kırmızı)
+            '#f97316', // Başlangıç (Turuncu)
+            '#eab308', // Gelişiyor (Sarı)
+            '#22c55e', // İyi (Yeşil)
+            '#3b82f6'  // Uzman (Mavi)
+          ],
+          borderRadius: 4,
+          borderSkipped: false
         }]
       },
-      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x:{ grid:{display:false} }, y:{ beginAtZero:true, grid:{color:'rgba(255,255,255,0.1)'} } } }
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { 
+            backgroundColor: 'rgba(0,0,0,0.8)',
+            titleColor: '#fff',
+            bodyColor: '#fff',
+            padding: 10,
+            cornerRadius: 8,
+            displayColors: false
+          }
+        },
+        scales: {
+          x: { 
+            grid: { display: false },
+            ticks: { color: textColor, font: { size: 11 } }
+          },
+          y: { 
+            beginAtZero: true, 
+            grid: { color: gridColor },
+            ticks: { color: textColor, font: { size: 10 } }
+          }
+        }
+      }
     });
   }
 
+  // 4. Modalı Göster ve Kapatma Olaylarını Bağla
   overlay.style.display = "flex";
-  overlay.setAttribute("aria-hidden","false");
+  overlay.setAttribute("aria-hidden", "false");
+
   const close = () => closeSrsModal();
-  const btnX = document.getElementById("btnCloseSrs");
-  const btnOk = document.getElementById("btnOkSrs");
-  if (btnX) btnX.onclick = close;
-  if (btnOk) btnOk.onclick = close;
+  
+  // Yeni oluşturulan butonlara event bağla
+  document.getElementById("btnCloseSrsInternal").onclick = close;
+  document.getElementById("btnOkSrsInternal").onclick = close;
+  
+  // Dışarı tıklama ve ESC
   overlay.onclick = (e) => { if (e.target === overlay) close(); };
-  document.addEventListener("keydown", function esc(e){ if (e.key === "Escape"){ close(); document.removeEventListener("keydown", esc); } });
+  
+  // Önceki listenerları temizlemek için (closure sorunu olmaması adına)
+  const escHandler = (e) => { if (e.key === "Escape") { close(); document.removeEventListener("keydown", escHandler); } };
+  document.addEventListener("keydown", escHandler);
 }
 
 export function closeSrsModal(){
   const overlay = document.getElementById("srsModal");
-  if(overlay) overlay.style.display="none";
+  if(overlay) {
+    overlay.style.display="none";
+    overlay.setAttribute("aria-hidden", "true");
+  }
 }
 
-// ================= FOCUS NAV =================
+// ================= FOCUS NAV (FULL SÜRÜM) =================
 const FOCUS_PAGE_SIZE = 20;
 
 function ensureFocusMiniNav(){
@@ -837,4 +1129,40 @@ export function refreshFocusMiniNav(state){
 function clampInt(v, a, b) {
   const n = Number.isFinite(Number(v)) ? Number(v) : a;
   return Math.max(a, Math.min(b, n));
+}
+
+// ================= TEMA YÖNETİMİ =================
+export function initTheme() {
+  const btn = document.getElementById("btnThemeToggle");
+  if (!btn) return;
+
+  const savedTheme = localStorage.getItem("APP_THEME") || "dark";
+  applyTheme(savedTheme);
+
+  btn.onclick = () => {
+    let current = document.body.classList.contains("light-mode") ? "light" 
+                : document.body.classList.contains("sepia-mode") ? "sepia" 
+                : "dark";
+    
+    let next = "dark";
+    if (current === "dark") next = "light";
+    else if (current === "light") next = "sepia";
+    
+    applyTheme(next);
+  };
+}
+
+function applyTheme(themeName) {
+  document.body.classList.remove("light-mode", "sepia-mode");
+  
+  if (themeName === "light") document.body.classList.add("light-mode");
+  if (themeName === "sepia") document.body.classList.add("sepia-mode");
+  
+  const btn = document.getElementById("btnThemeToggle");
+  if (btn) {
+    if (themeName === "dark") btn.textContent = "🌙 Koyu";
+    if (themeName === "light") btn.textContent = "☀️ Açık";
+    if (themeName === "sepia") btn.textContent = "📖 Kitap";
+  }
+  localStorage.setItem("APP_THEME", themeName);
 }

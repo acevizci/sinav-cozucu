@@ -4,29 +4,49 @@
    - Renklendirmeler ve Focus Modu Korundu
    ========================================= */
 
-/* ===== ROOT ===== */
-:root{
-  --bg0:#05060a;
-  --bg1:#070a12;
-
-  --glass:rgba(255,255,255,.05);
-  --glass2:rgba(255,255,255,.08);
-  --stroke:rgba(255,255,255,.12);
-
-  --text:rgba(255,255,255,.92);
-  --muted:rgba(255,255,255,.62);
-
-  --accent:#0A84FF;
-  --ok:#34C759;
-  --bad:#FF453A;
-  --warn:#FF9F0A;
-
-  --radius:18px;
-  --radius2:14px;
-
-  --shadow2:0 10px 30px rgba(0,0,0,.35);
+/* ===== UNIFIED VARIABLES ===== */
+:root {
+  --bg0: #05060a;
+  --bg1: #070a12;
+  --glass: rgba(255, 255, 255, .05);
+  --glass2: rgba(255, 255, 255, .08);
+  --stroke: rgba(255, 255, 255, .12);
+  --text: rgba(255, 255, 255, .92);
+  --muted: rgba(255, 255, 255, .62);
+  --accent: #0A84FF;
+  --ok: #34C759;
+  --bad: #FF453A;
+  --warn: #FF9F0A;
+  --radius: 18px;
+  --radius2: 14px;
+  --shadow2: 0 10px 30px rgba(0,0,0,.35);
 }
 
+/* ☀️ LIGHT MODE OVERRIDE */
+body.light-mode {
+  --bg0: #F2F2F7;
+  --bg1: #FFFFFF;
+  --glass: rgba(0, 0, 0, 0.05);
+  --glass2: rgba(0, 0, 0, 0.08);
+  --stroke: rgba(0, 0, 0, 0.12);
+  --text: #1C1C1E;
+  --muted: #636366;
+  --accent: #007AFF;
+  --shadow2: 0 10px 30px rgba(0,0,0,0.05);
+}
+
+/* 📖 SEPIA MODE OVERRIDE */
+body.sepia-mode {
+  --bg0: #F4ECD8;
+  --bg1: #FDF6E3;
+  --glass: rgba(91, 70, 54, 0.07);
+  --glass2: rgba(91, 70, 54, 0.12);
+  --stroke: rgba(91, 70, 54, 0.15);
+  --text: #5B4636;
+  --muted: #948678;
+  --accent: #D33682;
+  --shadow2: 0 10px 30px rgba(91, 70, 54, 0.1);
+}
 /* ===== RESET ===== */
 *{ box-sizing:border-box; }
 body{
@@ -928,3 +948,361 @@ button.warn:hover {
 }
 
 @keyframes fadeIn { from { opacity:0; transform:translateY(-5px); } to { opacity:1; transform:translateY(0); } }
+
+/* AI GENERATOR - BENZER SORU MODU */
+.btn-ai-similar {
+  background: linear-gradient(135deg, #f59e0b, #d97706); /* Turuncu Gradyan */
+  border: none;
+  color: white;
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 12px;
+  cursor: pointer;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 6px;
+  box-shadow: 0 2px 5px rgba(245, 158, 11, 0.4);
+  transition: .2s;
+}
+.btn-ai-similar:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(245, 158, 11, 0.6);
+}
+
+/* Yeni Soru Kutusu */
+.ai-challenge-box {
+  margin-top: 15px;
+  border: 2px dashed #f59e0b; /* Kesik çizgili turuncu kenarlık */
+  border-radius: 12px;
+  padding: 15px;
+  background: rgba(245, 158, 11, 0.08); /* Hafif turuncu zemin */
+  animation: fadeIn 0.4s ease;
+}
+
+.ai-challenge-header {
+  color: #fbbf24;
+  font-weight: bold;
+  font-size: 13px;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.ai-new-q-text {
+  font-size: 15px;
+  font-weight: 500;
+  margin-bottom: 12px;
+  line-height: 1.5;
+  color: #fff;
+}
+
+/* AI Şıkları */
+.ai-opt-btn {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid #444;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  border-radius: 8px;
+  color: #ddd;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.ai-opt-btn:hover { background: rgba(255,255,255,0.1); border-color: #666; }
+
+/* Doğru/Yanlış Durumları */
+.ai-opt-btn.correct { background: #10b981 !important; border-color: #10b981; color: white; font-weight: bold; }
+.ai-opt-btn.wrong { background: #ef4444 !important; border-color: #ef4444; color: white; opacity: 0.7; }
+.ai-opt-btn.disabled { pointer-events: none; }
+
+.ai-explanation {
+  margin-top: 10px;
+  padding: 10px;
+  background: rgba(0,0,0,0.2);
+  border-radius: 6px;
+  font-size: 13px;
+  color: #fbbf24;
+  display: none; /* Başta gizli */
+}
+
+/* ============================================================ */
+/* 🌓 TEMA YÖNETİMİ & RENK AYARLARI (CLEAN VERSION)             */
+/* ============================================================ */
+
+/* 1. TEMEL DEĞİŞKENLER (KOYU MOD - VARSAYILAN) */
+:root {
+  --bg-main: #000000;
+  --bg-panel: #1c1c1e;
+  --text-main: #ffffff;
+  --text-muted: #8e8e93;
+  --border-color: #2c2c2e;
+  --accent-color: #a855f7;
+  --opt-bg: rgba(255,255,255,0.05);
+  --opt-hover: rgba(255,255,255,0.1);
+}
+
+/* 2. MOD TANIMLARI (DEĞİŞKENLER) */
+
+/* ☀️ AYDINLIK MOD */
+body.light-mode {
+  --bg-main: #f2f2f7;
+  --bg-panel: #ffffff;
+  --text-main: #1c1c1e;
+  --text-muted: #636366;
+  --border-color: #d1d1d6;
+  --accent-color: #5856d6;
+  --opt-bg: #f2f2f7;
+  --opt-hover: #e5e5ea;
+}
+
+/* 📖 KİTAP (SEPYA) MODU */
+body.sepia-mode {
+  --bg-main: #f4ecd8;
+  --bg-panel: #fdf6e3;
+  --text-main: #5b4636;
+  --text-muted: #948678;
+  --border-color: #eaddc5;
+  --accent-color: #d33682;
+  --opt-bg: #eee8d5;
+  --opt-hover: #e4dcc3;
+}
+
+/* 3. GLOBAL TEMA UYGULAMASI (ZORLAYICI KURALLAR) */
+
+/* Ana Gövde */
+body {
+  background-color: var(--bg-main) !important;
+  color: var(--text-main) !important;
+  transition: background 0.3s, color 0.3s;
+}
+
+/* Metin Okunabilirliği (Light/Sepia için zorunlu) */
+body.light-mode h1, body.sepia-mode h1,
+body.light-mode h2, body.sepia-mode h2,
+body.light-mode h3, body.sepia-mode h3,
+body.light-mode p, body.sepia-mode p,
+body.light-mode span, body.sepia-mode span,
+body.light-mode div, body.sepia-mode div,
+body.light-mode label, body.sepia-mode label,
+body.light-mode b, body.sepia-mode b,
+body.light-mode i, body.sepia-mode i,
+body.light-mode .qText, body.sepia-mode .qText,
+body.light-mode .sub, body.sepia-mode .sub,
+body.light-mode .muted, body.sepia-mode .muted,
+body.light-mode .meta, body.sepia-mode .meta {
+    color: var(--text-main) !important;
+}
+
+/* Silik Yazılar (Override) */
+body.light-mode .sub, body.sepia-mode .sub,
+body.light-mode .muted, body.sepia-mode .muted,
+body.light-mode .meta, body.sepia-mode .meta,
+body.light-mode .srsHint, body.sepia-mode .srsHint {
+    color: var(--text-muted) !important;
+}
+
+/* 4. ARAYÜZ ELEMANLARI (KARTLAR, BUTONLAR, INPUTLAR) */
+
+/* Arka Plan ve Kenarlıklar */
+body.light-mode .card, body.sepia-mode .card,
+body.light-mode .modalCard, body.sepia-mode .modalCard,
+body.light-mode .settings-box, body.sepia-mode .settings-box,
+body.light-mode .toolbar, body.sepia-mode .toolbar,
+body.light-mode .navGrid, body.sepia-mode .navGrid,
+body.light-mode input, body.sepia-mode input,
+body.light-mode textarea, body.sepia-mode textarea,
+body.light-mode select, body.sepia-mode select {
+    background-color: var(--bg-panel) !important;
+    color: var(--text-main) !important;
+    border-color: var(--border-color) !important;
+}
+
+/* Şıklar (Options) */
+body.light-mode .opt, body.sepia-mode .opt {
+    background-color: var(--opt-bg) !important;
+    border-color: var(--border-color) !important;
+}
+body.light-mode .opt:hover, body.sepia-mode .opt:hover {
+    background-color: var(--opt-hover) !important;
+}
+
+/* Butonlar (Genel) - Yazıyı Koyu Yap */
+body.light-mode button, body.sepia-mode button,
+body.light-mode .g-btn, body.sepia-mode .g-btn,
+body.light-mode input[type="button"], body.sepia-mode input[type="button"],
+body.light-mode input[type="submit"], body.sepia-mode input[type="submit"] {
+    color: var(--text-main) !important;
+    border-color: var(--border-color) !important;
+}
+
+/* Ana Aksiyon Butonları (Başlat/Bitir) - Ekstra Vurgu */
+body.light-mode #btnStart, body.sepia-mode #btnStart,
+body.light-mode #btnFinish, body.sepia-mode #btnFinish,
+body.light-mode #btnReset, body.sepia-mode #btnReset {
+    color: #000 !important;
+    font-weight: 800;
+}
+
+/* 5. NAVİGASYON (AKILLI RENKLENDİRME) */
+
+/* Durum A: Boş Kutular (Koyu Yazı) */
+body.light-mode .navBtn, body.sepia-mode .navBtn {
+    color: var(--text-main) !important;
+    background: transparent !important;
+    border: 1px solid var(--border-color) !important;
+}
+
+/* Durum B: Aktif Soru (Vurgulu) */
+body.light-mode .navBtn.active, body.sepia-mode .navBtn.active {
+    color: var(--text-main) !important;
+    border-color: var(--accent) !important;
+    background: rgba(10, 132, 255, 0.15) !important;
+    font-weight: 900;
+    box-shadow: 0 0 0 2px var(--accent) !important;
+}
+
+/* Durum C: Sonuçlar (Renkli Yazı - Okunabilirlik İçin) */
+body.light-mode .navBtn.answered, body.sepia-mode .navBtn.answered {
+    color: #0056b3 !important; /* Koyu Mavi */
+    background: rgba(10, 132, 255, 0.25) !important;
+    border-color: #0056b3 !important;
+}
+body.light-mode .navBtn.correct, body.sepia-mode .navBtn.correct {
+    color: #14532d !important; /* Koyu Yeşil */
+    background: rgba(34, 197, 94, 0.3) !important;
+    border-color: #14532d !important;
+}
+body.light-mode .navBtn.wrong, body.sepia-mode .navBtn.wrong {
+    color: #7f1d1d !important; /* Koyu Kırmızı */
+    background: rgba(239, 68, 68, 0.25) !important;
+    border-color: #7f1d1d !important;
+}
+body.light-mode .navBtn.empty-result, body.sepia-mode .navBtn.empty-result {
+    color: #7c2d12 !important; /* Koyu Turuncu */
+    background: rgba(249, 115, 22, 0.25) !important;
+}
+
+/* 6. İSTİSNALAR (Rengini Koruması Gerekenler) */
+/* Toast mesajları, Badge'ler ve AI butonları her zaman beyaz yazı kalsın */
+body.light-mode .toast, body.sepia-mode .toast,
+body.light-mode .toast div, body.sepia-mode .toast div,
+body.light-mode .badge, body.sepia-mode .badge,
+body.light-mode .btn-ai-explain, body.sepia-mode .btn-ai-explain,
+body.light-mode .btn-ai-similar, body.sepia-mode .btn-ai-similar {
+    color: #fff !important;
+}
+
+/* AI Kutusu (Zemini renkli olduğu için yazısı açık renk kalmalı) */
+body.light-mode .ai-box, body.sepia-mode .ai-box,
+body.light-mode .ai-challenge-box, body.sepia-mode .ai-challenge-box {
+    color: inherit !important;
+}
+
+/* =========================================
+   SRS DASHBOARD (Analiz Paneli) STİLLERİ
+   ========================================= */
+
+.srs-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr); /* 2 Sütun */
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.srs-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  transition: transform 0.2s;
+}
+
+.srs-card:hover {
+  background: rgba(255, 255, 255, 0.06);
+  transform: translateY(-2px);
+}
+
+.srs-val {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--text-main);
+  margin-bottom: 4px;
+}
+
+.srs-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  display: flex; 
+  align-items: center; 
+  gap: 6px;
+}
+
+/* Renkli Vurgular */
+.srs-card.highlight .srs-val { color: var(--accent); } /* Mavi */
+.srs-card.urgent .srs-val { color: var(--warn); }      /* Turuncu */
+.srs-card.good .srs-val { color: var(--ok); }          /* Yeşil */
+
+/* Grafik Kutusu */
+.chart-wrapper {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 12px;
+  padding: 15px;
+  border: 1px solid var(--border-light);
+  height: 200px; /* Grafik yüksekliği */
+}
+
+/* =========================================
+   KARNE BUTONLARI FIX (ELIF ÖZEL)
+   - Root silinse bile bu butonlar görünür kalır
+   ========================================= */
+
+/* 1. Hataları Tekrarla Butonu (Turuncu) */
+.summaryActions button.warn, 
+button[onclick*="retry"], 
+.srsBtn[data-quality] {
+  background: rgba(255, 159, 10, 0.15) !important;
+  border: 1px solid rgba(255, 159, 10, 0.4) !important;
+  color: #c27800 !important; /* Sepya ve Light modda okunması için biraz koyulaştırıldı */
+  display: inline-flex !important;
+  padding: 10px 16px !important;
+  font-weight: 600 !important;
+}
+
+/* 2. İncele Butonu (Pembe/Kırmızı) */
+.summaryActions button.bad, 
+button[onclick*="review"],
+.modalActions .ghost {
+  background: rgba(255, 69, 58, 0.1) !important;
+  border: 1px solid rgba(255, 69, 58, 0.3) !important;
+  color: #d73a30 !important;
+  display: inline-flex !important;
+  padding: 10px 16px !important;
+}
+
+/* 3. Tamam Butonu (Mavi) */
+.summaryActions .primary, 
+button#btnFinishModal {
+  background: rgba(10, 132, 255, 0.2) !important;
+  border: 1px solid rgba(10, 132, 255, 0.4) !important;
+  color: #007aff !important;
+  display: inline-flex !important;
+  padding: 10px 16px !important;
+}
+
+/* Karanlık modda yazı renklerini tekrar parlat */
+body:not(.light-mode):not(.sepia-mode) .summaryActions button {
+  color: #fff !important;
+}

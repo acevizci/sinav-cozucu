@@ -6,6 +6,7 @@
   <title>Sınav Çözücü v3</title>
 
   <script src="https://unpkg.com/mammoth/mammoth.browser.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
   <link rel="stylesheet" href="./styles.css" />
@@ -14,8 +15,14 @@
 <body>
 
 <header>
-  <h1>📚 Sınav Çözücü</h1>
-  <div class="sub">Kişisel deneme alanın. Soruları yükle, çöz, analiz et.</div>
+  <div style="flex:1">
+    <h1>📚 Sınav Çözücü</h1>
+    <div class="sub">Bulut tabanlı kişisel deneme alanı.</div>
+  </div>
+  
+  <button id="btnThemeToggle" class="g-btn" style="width:auto; padding:8px 12px; background:transparent; border:1px solid var(--border-color); color:var(--text-main);">
+    🌓 Tema
+  </button>
 </header>
 
 <main>
@@ -35,7 +42,7 @@
 
       <div id="tab-file" class="tab-content active">
         <label class="drop-zone">
-          <input id="fileInput" type="file" accept=".docx,.txt" hidden />
+          <input id="fileInput" type="file" accept=".docx,.txt,.pdf" hidden />
           <div class="dz-icon">☁️</div>
           <div class="dz-text">Dosyayı buraya bırak<br>veya <span class="lnk">seç</span></div>
           <div class="dz-filename" id="fileNameDisplay"></div>
@@ -71,6 +78,14 @@
         <button id="btnReset" class="bad">Sıfırla</button>
       </div>
     </div>
+
+	    <!-- Mod A: Anahtar yok/kısmi ise AI ile çözme akışı -->
+	    <div id="aiSolveWrap" style="display:none; margin-top:10px;">
+	      <button id="btnAiSolve" class="btn-lg warn" style="width:100%;">🤖 AI ile Çöz (Tahmini)</button>
+	      <div id="aiWarnBox" class="muted" style="font-size:12px; margin-top:6px; line-height:1.35;">
+	        ⚠️ Bu sınavda cevap anahtarı yok veya eksik. Puan AI tarafından tahmin edilecektir.
+	      </div>
+	    </div>
 
     <div class="divider"></div>
 

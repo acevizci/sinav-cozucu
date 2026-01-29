@@ -1,11 +1,21 @@
 import { el, normalizeText, downloadBlob, formatTime } from "./utils.js";
-import { parseExam } from "./parser.js";
+import { parseExam, readFileAsText } from "./parser.js";
 import { applyShuffle } from "./shuffle.js";
 import { createTimer } from "./timer.js";
 import { saveState, loadState, clearSaved } from "./storage.js";
 import { addToWrongBookFromExam, buildWrongOnlyParsed, exportWrongBook, clearWrongBook, wrongBookStats, wrongBookDashboard, getSrsInfoForParsed, setSrsQualityByQuestion } from "./wrongBook.js";
 import { exportCSV, exportJSON } from "./export.js";
-import { setStatus, showWarn, showToast, setLoading, updateModeUI, updateStats, buildNav, refreshNavColors, renderFocusMiniNav, refreshFocusMiniNav, renderExam, attachKeyboardShortcuts, openSummaryModal, closeSummaryModal, openSrsModal, closeSrsModal } from "./ui.js";
+// app.js - En üst satır (Eklendi: initTheme)
+import {
+  setStatus, showWarn, showToast, setLoading,
+  updateModeUI, updateStats, buildNav, refreshNavColors,
+  renderFocusMiniNav, refreshFocusMiniNav,
+  renderExam, attachKeyboardShortcuts,
+  openSummaryModal, closeSummaryModal,
+  openSrsModal, closeSrsModal,
+  initTheme,
+  generateAnswerKeyWithGemini,
+} from "./ui.js";
 
 /* ================= SAFE DOM ================= */
 window.el = id => document.getElementById(id);
@@ -149,6 +159,23 @@ function updateSummary(){
   set("sumS", score);
 }
 
+/* ================= MOD A UI (AI Key) ================= */
+function updateAiSolveUI(){
+  const wrap = el("aiSolveWrap");
+  if (!wrap) return;
+  const parsed = state.parsed;
+  if (!parsed){ wrap.style.display = "none"; return; }
+
+  const totalQ = parsed.questions?.length || 0;
+  const keyCount = parsed.keyCount || 0;
+  const cov = parsed.meta?.keyCoverage ?? (totalQ ? keyCount/totalQ : 0);
+
+  // show AI solve if key is missing or partial (coverage < 95%) and we're not already on AI key
+  const isAi = parsed.meta?.keySource === "ai";
+  const shouldShow = (totalQ > 0) && !isAi && (keyCount === 0 || cov < 0.95);
+  wrap.style.display = shouldShow ? "block" : "none";
+}
+
 /* ================= SAVE ================= */
 function persist(){
   saveState({
@@ -213,32 +240,6 @@ function restore(){
   state.answers = new Map(d.answersArr || []);
 }
 
-/* ================= FILE READ ================= */
-async function readFileAsText(file){
-  const name = file.name.toLowerCase();
-  if (name.endsWith(".txt")) return file.text();
-  if (name.endsWith(".docx")){
-    const buf = await file.arrayBuffer();
-
-    // RawText bazı DOCX'lerde paragrafları tek satıra indirip
-    // şıkları/çözümü birbirine yapıştırabiliyor. Bu yüzden HTML'e çevirip
-    // paragraf/öğe sınırlarını koruyarak metin topluyoruz.
-    const r = await mammoth.convertToHtml({ arrayBuffer: buf });
-    const html = r.value || "";
-    const doc = new DOMParser().parseFromString(html, "text/html");
-
-    const parts = [];
-    // p, li ve başlıkları satır olarak al
-    doc.querySelectorAll("h1,h2,h3,h4,h5,h6,p,li").forEach(node => {
-      const t = (node.textContent || "").replace(/\s+/g, " ").trim();
-      if (t) parts.push(t);
-    });
-
-    return parts.join("\n");
-  }
-  throw new Error("Sadece DOCX veya TXT");
-}
-
 /* ================= PARSE ================= */
 async function doParse({ autoStartHint=true } = {}){
   try{
@@ -257,6 +258,16 @@ async function doParse({ autoStartHint=true } = {}){
 
     const base = parseExam(text);
     state.parsed = applyShuffle(base, { shuffleQ: state.shuffleQ, shuffleO: state.shuffleO });
+
+    // Key coverage meta (0..1). PDF'lerde anahtar tamamen veya kısmen eksik olabiliyor.
+    {
+      const totalQ = state.parsed?.questions?.length || 0;
+      const keyCount = state.parsed?.keyCount || 0;
+      state.parsed.meta = state.parsed.meta || {};
+      state.parsed.meta.keyCoverage = totalQ ? (keyCount / totalQ) : 0;
+      // keySource: 'doc' (dosyadan) varsayımı; AI üretince 'ai' yapılacak.
+      if (!state.parsed.meta.keySource) state.parsed.meta.keySource = keyCount ? "doc" : "none";
+    }
 
     state.mode = "prep";
     state.answers.clear();
@@ -349,7 +360,10 @@ function finishExam(){
     else wrong++;
   }
 
-  const score = total ? Math.round((correct/total)*100) : 0;
+  const denom = total - keyMissing;
+  // Eğer hiç anahtar yoksa skor hesaplanamaz.
+  // Anahtar kısmi ise, skoru sadece anahtarı olan sorular üzerinden hesapla.
+  const score = denom > 0 ? Math.round((correct/denom)*100) : null;
 
   const spent = state.durationSec - (state.timeLeftSec ?? state.durationSec);
   const timeSpent = formatTime(spent);
@@ -360,7 +374,8 @@ function finishExam(){
   openSummaryModal?.({
     total, answered, correct, score,
     wrong, blank, keyMissing, timeSpent,
-    title: state.parsed.title
+    title: state.parsed.title,
+    isAiKey: state.parsed?.meta?.keySource === "ai",
   });
 
   showToast?.({ title:"Bitti", msg:"Sınav tamamlandı.", kind:"ok" });
@@ -387,6 +402,7 @@ function resetAll(){
 function paintAll(){
   const wrongStats = wrongBookStats();
   updateModeUI(state, wrongStats);
+  updateAiSolveUI();
   renderExam(state);
   buildNav(state);
   refreshNavColors(state);
@@ -404,6 +420,39 @@ el("btnFinish").onclick = finishExam;
 const _btnFinishFocus = document.getElementById("btnFinishFocus");
 if (_btnFinishFocus) _btnFinishFocus.onclick = (e)=>{ e.preventDefault(); finishExam(); };
 el("btnReset").onclick = resetAll;
+
+// ================= AI KEY (Mod A) =================
+async function runAiSolve(){
+  if (!state.parsed) return;
+  try {
+    setLoading(true, "AI cevap anahtarı üretiliyor…");
+
+    const totalQ = state.parsed?.questions?.length || 0;
+    const existing = state.parsed.answerKey || {};
+
+    // ui.js fonksiyonu: Gemini ile key üretir (JSON-only batch prompt)
+    const aiKey = await generateAnswerKeyWithGemini(state.parsed, { limit: totalQ, batchSize: 10 });
+    const merged = { ...existing, ...(aiKey || {}) };
+
+    state.parsed.answerKey = merged;
+    state.parsed.keyCount = Object.keys(merged).length;
+    state.parsed.meta = state.parsed.meta || {};
+    state.parsed.meta.keySource = "ai";
+    state.parsed.meta.keyCoverage = totalQ ? (state.parsed.keyCount / totalQ) : 0;
+
+    showToast?.({ title:"AI", msg:`Anahtar üretildi: ${state.parsed.keyCount}/${totalQ}`, kind:"ok" });
+    paintAll();
+    persist();
+  } catch (e) {
+    console.error(e);
+    showToast?.({ title:"AI", msg: (e?.message || "AI anahtar üretilemedi"), kind:"warn" });
+  } finally {
+    setLoading(false);
+  }
+}
+
+const __btnAiSolve = el("btnAiSolve");
+if (__btnAiSolve) __btnAiSolve.onclick = runAiSolve;
 
 // Focus bar
 const btnExitFocus = el("btnExitFocus");
@@ -654,6 +703,10 @@ attachKeyboardShortcuts(state,(q,l)=>{
 }, finishExam);
 
 /* ================= INIT ================= */
+
+
+/* ================= INIT ================= */
+initTheme(); // <--- BURAYA BUNU EKLE (Temayı başlatır)
 restore();
 setStatus("hazır");
 paintAll();

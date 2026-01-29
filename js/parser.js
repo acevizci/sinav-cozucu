@@ -439,14 +439,84 @@ async function docxArrayBufferToText(buf){
     .join("\n");
 }
 
+
+
+
+/* ================= PDF helpers ================= */
+
+async function pdfArrayBufferToText(buf){
+  // pdf.js must be loaded globally (index.html)
+  if (typeof pdfjsLib === "undefined"){
+    throw new Error("pdf.js bulunamadı. index.html'de pdf.js yüklü olmalı.");
+  }
+
+  // Ensure workerSrc for CDN usage
+  if (!pdfjsLib.GlobalWorkerOptions.workerSrc){
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+      "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+  }
+
+  const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+
+  const parts = [];
+  for (let p = 1; p <= pdf.numPages; p++){
+    const page = await pdf.getPage(p);
+    const content = await page.getTextContent();
+    const items = content.items || [];
+
+    // Group items into lines by Y coordinate
+    let lastY = null;
+    let line = [];
+
+    const flush = () => {
+      const s = line.join(" ").replace(/\s+/g, " ").trim();
+      if (s) parts.push(s);
+      line = [];
+    };
+
+    for (const it of items){
+      const str = (it.str || "").trim();
+      if (!str) continue;
+
+      const y = it.transform?.[5];
+      if (lastY == null){
+        lastY = y;
+        line.push(str);
+        continue;
+      }
+
+      // New line threshold (tweakable)
+      if (Math.abs(y - lastY) > 2.5){
+        flush();
+        lastY = y;
+      }
+      line.push(str);
+    }
+
+    flush();
+    parts.push(""); // page separator
+  }
+
+  return parts.join("\n").trim();
+}
+
+
 export async function readFileAsText(file){
   const name = (file?.name || "").toLowerCase();
+
   if (name.endsWith(".txt")) return await file.text();
+
   if (name.endsWith(".docx")){
     const buf = await file.arrayBuffer();
     return await docxArrayBufferToText(buf);
   }
-  throw new Error("Sadece DOCX veya TXT");
+
+  if (name.endsWith(".pdf")){
+    const buf = await file.arrayBuffer();
+    return await pdfArrayBufferToText(buf);
+  }
+
+  throw new Error("Sadece DOCX / TXT / PDF");
 }
 
 export async function parseFromFile(file){
