@@ -3,150 +3,311 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Sınav Çözücü v3</title>
+  <title>ACUMEN • Sınav Asistanı</title> 
+
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🐶</text></svg>">
 
   <script src="https://unpkg.com/mammoth/mammoth.browser.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+  
+<script src="js/auth.js"></script>
 
   <link rel="stylesheet" href="./styles.css" />
 </head>
 
 <body>
 
-<header>
-  <div style="flex:1">
-    <h1>📚 Sınav Çözücü</h1>
-    <div class="sub">Bulut tabanlı kişisel deneme alanı.</div>
+<div id="loginOverlay" class="login-wrapper">
+    <div class="blob blob-1"></div>
+    <div class="blob blob-2"></div>
+    
+    <div class="floating-icon icon-1">✖️</div>
+    <div class="floating-icon icon-2">➗</div>
+    <div class="floating-icon icon-3">📝</div>
+    <div class="floating-icon icon-4">✨</div>
+
+    <div class="login-card">
+        <div class="card-shine"></div>
+
+        <div class="avatar-container">
+            <div class="dog-anim">🐶</div>
+            <div class="avatar-glow"></div>
+        </div>
+        
+        <h1 class="app-title">ACUMEN <span style="font-size:12px; color:#a855f7; vertical-align: super;">v1.2</span></h1>
+        <p id="welcomeMsg" class="app-subtitle">Pati seni bekliyor...</p>
+
+        <button id="btnLoginGoogle" class="google-btn">
+            <div class="btn-shine"></div> <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="24" alt="Google">
+            <span>Maceraya Başla</span>
+        </button>
+        
+        <div id="loginError" class="login-error"></div>
+
+
+<div class="maker-signature">
+    Designed & Coded by <span class="maker-name">Aykut Cevizci</span> 👨‍💻
+</div>
+    </div>
+</div>
+
+<header class="glass-header">
+  <div class="header-content">
+    
+    <div class="brand-area">
+      <div class="logo-circle">🧠</div>
+      <div class="title-group">
+        <div style="display:flex; align-items:center; gap:8px;">
+            <h1>ACUMEN</h1>
+            <span class="version-badge">v1.2</span>
+        </div>
+        <div class="sub">Akıllı Çok Zeki Kişisel Sınav Asistanı :)</div>
+      </div>
+    </div>
+
+    <div class="status-group">
+      <div class="h-pill" title="Çalışma Modu">
+        <span class="h-icon">⚡</span>
+        <span id="modeLabel" class="h-val">Hazırlık</span>
+      </div>
+      <div class="h-pill" title="Cevap Anahtarı Durumu">
+        <span class="h-icon">🔑</span>
+        <span id="keyLabel" class="h-val">—</span>
+      </div>
+    </div>
+
+<div class="header-right">
+    
+    <div class="user-chip">
+        <span class="user-avatar">🧑‍🎓</span>
+        <span id="headerUserName" class="user-name">Öğrenci</span>
+    </div>
+
+    <button id="btnThemeToggle" class="theme-btn-icon" title="Temayı Değiştir">
+        🌙
+    </button>
+
+    <button id="btnLogout" class="btn-logout-header" title="Çıkış Yap">
+        <span style="font-size:14px;">🚪</span>
+    </button>
+</div>
+
   </div>
-  
-  <button id="btnThemeToggle" class="g-btn" style="width:auto; padding:8px 12px; background:transparent; border:1px solid var(--border-color); color:var(--text-main);">
-    🌓 Tema
-  </button>
 </header>
 
 <main>
 
-  <section class="card panel-left">
-    
-    <div class="panel-header">
-      <h3>🎛 Kontrol Merkezi</h3>
-      <div class="pill mono" id="parseStatus">hazır</div>
-    </div>
+<section class="card panel-left glass-panel">
 
-    <div class="input-group">
-      <div class="tabs">
-        <button class="tab-btn active" onclick="switchTab('file')">📂 Dosya</button>
-        <button class="tab-btn" onclick="switchTab('text')">📋 Metin</button>
+  <div class="panel-header">
+    <div class="panel-title">
+      <div class="icon-box">🎛</div>
+      <div class="title-text">
+        <h3>Kontrol Merkezi</h3>
+        <span id="parseStatus" class="status-text">Sistem Hazır</span>
+      </div>
+    </div>
+    <div class="status-indicator ready"></div> </div>
+
+  <div class="scrollable-content">
+      
+    <div class="input-section">
+      <div class="nav-pills">
+        <button class="nav-item active" onclick="switchTab('file')">📂 Dosya Yükle</button>
+        <button class="nav-item" onclick="switchTab('text')">📋 Metin Yapıştır</button>
       </div>
 
       <div id="tab-file" class="tab-content active">
-        <label class="drop-zone">
+        <label class="modern-dropzone">
           <input id="fileInput" type="file" accept=".docx,.txt,.pdf" hidden />
-          <div class="dz-icon">☁️</div>
-          <div class="dz-text">Dosyayı buraya bırak<br>veya <span class="lnk">seç</span></div>
+          <div class="dz-content">
+            <div class="dz-icon-circle">☁️</div>
+            <div class="dz-main-text">Dosyayı Buraya Bırak</div>
+            <div class="dz-sub-text">veya seçmek için tıkla</div>
+          </div>
           <div class="dz-filename" id="fileNameDisplay"></div>
         </label>
       </div>
 
       <div id="tab-text" class="tab-content" style="display:none;">
-        <textarea id="pasteArea" placeholder="Soruları buraya yapıştır..."></textarea>
+        <textarea id="pasteArea" class="glass-input" placeholder="Soruları buraya yapıştır..."></textarea>
       </div>
     </div>
 
-    <div class="settings-box">
-      <div class="setting-row">
-        <div class="inp-group">
-          <label>⏱ Süre (dk)</label>
-          <input id="durationMin" type="number" min="1" max="600" value="20">
-        </div>
-        <div class="toggles">
-          <label class="toggle" title="Focus Mod"><input id="focusMode" type="checkbox"> <span>Focus</span></label>
-          <label class="toggle" title="Otomatik Başlat"><input id="autoStart" type="checkbox" checked> <span>Oto.</span></label>
-        </div>
+    <div class="config-section">
+      <div class="config-title">SINAV AYARLARI</div>
+      
+      <div class="config-row">
+        <label class="config-label">⏱ Süre (Dakika)</label>
+        <input id="durationMin" type="number" class="glass-input small" min="1" max="600" value="20">
       </div>
-      <div class="setting-row low-gap">
-        <label class="chk"><input id="shuffleQ" type="checkbox" checked> Soru Karıştır</label>
-        <label class="chk"><input id="shuffleO" type="checkbox" checked> Şık Karıştır</label>
+
+      <div class="switches-grid">
+        <label class="switch-card" title="Dikkati dağıtan öğeleri gizle">
+          <input id="focusMode" type="checkbox">
+          <span class="slider"></span>
+          <span class="label">Focus Mod</span>
+        </label>
+
+        <label class="switch-card" title="Yüklenince hemen başla">
+          <input id="autoStart" type="checkbox" checked>
+          <span class="slider"></span>
+          <span class="label">Oto. Başlat</span>
+        </label>
+
+        <label class="switch-card">
+          <input id="shuffleQ" type="checkbox" checked>
+          <span class="slider"></span>
+          <span class="label">Soru Karıştır</span>
+        </label>
+
+        <label class="switch-card">
+          <input id="shuffleO" type="checkbox" checked>
+          <span class="slider"></span>
+          <span class="label">Şık Karıştır</span>
+        </label>
       </div>
     </div>
 
     <div class="main-actions">
-      <button id="btnStart" class="btn-lg primary" disabled>🚀 BAŞLAT</button>
-      <div class="sub-actions">
-        <button id="btnFinish" class="ok" disabled>✅ Bitir</button>
-        <button id="btnReset" class="bad">Sıfırla</button>
-      </div>
-    </div>
-
-	    <!-- Mod A: Anahtar yok/kısmi ise AI ile çözme akışı -->
-	    <div id="aiSolveWrap" style="display:none; margin-top:10px;">
-	      <button id="btnAiSolve" class="btn-lg warn" style="width:100%;">🤖 AI ile Çöz (Tahmini)</button>
-	      <div id="aiWarnBox" class="muted" style="font-size:12px; margin-top:6px; line-height:1.35;">
-	        ⚠️ Bu sınavda cevap anahtarı yok veya eksik. Puan AI tarafından tahmin edilecektir.
-	      </div>
-	    </div>
-
-    <div class="divider"></div>
-
-    <div class="tools-section">
-      <div class="sec-title">VERİ & ANALİZ</div>
-      <div class="tools-grid">
-        <button id="btnWrongMode">♻ Yanlışlar</button>
-        <button id="btnSrsDash">📅 SRS</button>
-        <button id="btnExportWrongBook">⬇ Hata Rap.</button>
-        <button id="btnExportCSV" disabled>⬇ CSV</button>
-      </div>
+      <button id="btnStart" class="btn-hero primary" disabled>
+        <span class="btn-icon">🚀</span> BAŞLAT
+      </button>
       
-      <div class="mini-tools">
-        <button id="btnClearWrongBook" class="text-btn">Temizle: Yanlışlar</button>
-        <button id="btnClearSave" class="text-btn warn">Temizle: Kayıt</button>
-        <button id="btnExportJSON" class="text-btn" disabled>JSON İndir</button>
+      <div class="sub-actions-row">
+        <button id="btnFinish" class="btn-secondary ok" disabled>✅ Bitir</button>
+        <button id="btnReset" class="btn-secondary bad">Sıfırla</button>
       </div>
     </div>
 
-    <div class="panel-timer">
-      <span class="muted">Kalan Süre:</span>
-      <span class="mono large" id="timer">--:--</span>
+    <div id="aiSolveWrap" class="ai-solve-box" style="display:none;">
+      <button id="btnAiSolve" class="btn-ai-magic">
+        <span>🤖</span> AI ile Tahmini Çöz
+      </button>
+      <div class="ai-hint">Anahtar yoksa yapay zeka devreye girer.</div>
     </div>
 
-  </section>
+    <div class="divider-line"></div>
+
+<div class="tools-section">
+  <div class="config-title" style="margin-bottom:12px;">🛠 ARAÇLAR & ANALİZ</div>
+  
+  <div class="tools-grid-modern">
+    <button id="btnWrongMode" class="tool-card purple-glow">
+      <div class="tc-icon">♻️</div>
+      <div class="tc-info">
+        <span class="tc-title">Yanlışlar</span>
+        <span class="tc-desc">Hatalarını tekrar et</span>
+      </div>
+    </button>
+
+    <button id="btnSrsDash" class="tool-card blue-glow">
+      <div class="tc-icon">🧠</div>
+      <div class="tc-info">
+        <span class="tc-title">SRS Hafıza</span>
+        <span class="tc-desc">Kalıcı öğrenme</span>
+      </div>
+    </button>
+
+    <button id="btnExportWrongBook" class="tool-card green-glow full-width">
+      <div class="tc-icon">📉</div>
+      <div class="tc-info">
+        <span class="tc-title">Detaylı Rapor Al</span>
+        <span class="tc-desc">İlerlemeni HTML olarak indir</span>
+      </div>
+    </button>
+  </div>
+
+  <div class="danger-zone-modern">
+    <button id="btnClearWrongBook" class="danger-btn">
+      <span>🗑️ Yanlışları Temizle</span>
+    </button>
+    <button id="btnClearSave" class="danger-btn outline">
+      <span>⚠️ Sıfırla</span>
+    </button>
+  </div>
+</div>
+
+  </div> <div class="timer-footer">
+    <div class="timer-label">KALAN SÜRE</div>
+    <div id="timer" class="timer-digital">--:--</div>
+  </div>
+
+</section>
 
 
-  <section class="card">
+<section class="card glass-panel exam-container">
 
-    <div class="between">
+  <div class="exam-header-bar">
+    <div class="exam-info">
+      <div class="exam-icon">📝</div>
       <div>
         <h2 id="examTitle">Sınav</h2>
-        <div class="meta" id="examMeta">Henüz ayrıştırılmadı.</div>
-      </div>
-      <div class="row">
-        <span class="pill">Mod: <span id="modeLabel">Hazırlık</span></span>
-        <span class="pill">Anahtar: <span id="keyLabel">—</span></span>
+        <div id="examMeta" class="exam-meta">Hazır olduğunda başlat.</div>
       </div>
     </div>
 
     <div class="toolbar" id="resultTools" style="display:none;">
-      <label class="pill"><input id="showOnlyWrong" type="checkbox"> Yanlışlar</label>
-      <label class="pill"><input id="showOnlyBlank" type="checkbox"> Boşlar</label>
-      <span class="sep"></span>
-      <span class="small">Navigasyondan soruya zıpla.</span>
+      <label class="filter-chip wrong">
+        <input id="showOnlyWrong" type="checkbox"> 
+        <span>Sadece Yanlışlar</span>
+      </label>
+      <label class="filter-chip blank">
+        <input id="showOnlyBlank" type="checkbox"> 
+        <span>Boşlar</span>
+      </label>
+    </div>
+  </div>
+
+  <div class="layoutExam" id="layoutExam">
+    
+    <div class="navPanel glass-inner" id="navPanel" style="display:none;">
+      <div class="navHeader">
+        <span>📍 SORU HARİTASI</span>
+      </div>
+      <div class="navGrid" id="navGrid">
+        </div>
     </div>
 
-    <div class="layoutExam">
-      <div class="navPanel">
-        <div class="navHeader">📍 Navigasyon</div>
-        <div class="navGrid" id="navGrid"></div>
-      </div>
-
-      <div>
-        <div id="examArea">
-          <div class="hint">Sınav burada görünecek.</div>
+    <div class="paper-area">
+      <div id="examArea" class="exam-scroll-content">
+        <div class="empty-state">
+          <div style="font-size:40px; margin-bottom:10px;">📄</div>
+          <div>Sınav yüklenince sorular burada görünecek.</div>
         </div>
       </div>
     </div>
-  </section>
 
+  </div>
+</section>
+
+<div id="updateModal" class="modalOverlay" style="display:none;">
+  <div class="modalCard" style="max-width: 500px;">
+    
+    <div class="modalTop">
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <div class="step-icon" style="background: rgba(255, 45, 85, 0.1); border-color: rgba(255, 45, 85, 0.3); font-size: 22px; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; border-radius: 12px; border: 1px solid var(--stroke);">
+          🎁
+        </div>
+        <div>
+          <div class="modalTitle">Yenilikler & Güncellemeler</div>
+          <div class="modalSub" id="updateVersionBadge">Sürüm 1.0.0</div>
+        </div>
+      </div>
+      <button onclick="closeUpdateModal()" class="modalClose">✕</button>
+    </div>
+
+    <div id="updateContent" style="margin-top: 20px; max-height: 300px; overflow-y: auto;">
+      </div>
+
+    <div class="modalActions">
+      <button onclick="closeUpdateModal()" class="primary" style="width:100%">Harika, Keşfet!</button>
+    </div>
+  </div>
+</div>
 </main>
 
 <script type="module" src="./js/app.js"></script>
@@ -177,16 +338,64 @@
   }
 </script>
 
+  <script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+  // BURADA DEĞİŞİKLİK YAPTIK 👇 (signInWithPopup -> signInWithRedirect)
+  import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+  
+  // 1. ADIMDA KOPYALADIĞIN KODU BURAYA YAPIŞTIR 👇
+  const firebaseConfig = {
+  apiKey: "AIzaSyCy9ThyC6Oojht0lsFyngTFnJOupDngAtQ",
+  authDomain: "acumen-sinav.firebaseapp.com",
+  projectId: "acumen-sinav",
+  storageBucket: "acumen-sinav.firebasestorage.app",
+  messagingSenderId: "888520085772",
+  appId: "1:888520085772:web:d9bc814c06a8b140057929",
+  measurementId: "G-9ZREWM2734"
+};
+
+  // Firebase Başlat
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  window.auth = auth; // Global erişim için
+  window.googleProvider = new GoogleAuthProvider();
+  window.signInWithPopup = signInWithPopup; 
+  window.signOut = signOut;
+</script>
+
+
+
 
 <div id="summaryModal" class="modalOverlay" style="display:none;" aria-hidden="true">
   <div class="modalCard" role="dialog" aria-modal="true">
-    
+
     <div class="modalTop">
       <div>
         <div id="summaryTitle" class="modalTitle">📊 Sınav Karnesi</div>
         <div id="summarySub" class="modalSub">Performans analizi</div>
       </div>
       <button id="btnCloseSummary" class="modalClose">✕</button>
+    </div>
+
+    <!-- ✅ Konu Analizi: Buton + Panel + Tek Canvas -->
+    <div class="divider"></div>
+
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px;">
+      <div class="modalSub" style="margin:0;">📊 Konu Bazlı Hata Analizi</div>
+
+      <!-- ✅ AI konu tamamlama butonu: en optimal yer -->
+      <button id="btnAiSubjects" class="g-btn" style="width:auto;">
+        🤖 AI ile Konuları Tamamla
+      </button>
+    </div>
+
+    <!-- ✅ Progress + sayaçlar + öneri listesi mount alanı -->
+    <div id="aiSubjectPanelMount"></div>
+
+    <div id="subjectAnalysisWrap" style="display:block; width: 100%;">
+      <div style="height: 180px; width: 100%; position: relative;">
+        <canvas id="subjectChart"></canvas>
+      </div>
     </div>
 
     <div class="summaryLayout">
@@ -288,10 +497,10 @@
       <br><br>
       <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color: #a855f7; text-decoration: underline;">Anahtarı buradan alabilirsin ↗</a>
     </div>
-    
+
     <input type="text" id="inpApiKeyUi" placeholder="AIza... ile başlayan kodunu yapıştır" 
            style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #444; background: #222; color: white; font-family: monospace; margin-bottom: 10px;">
-    
+
     <div id="keyErrorUi" style="color: #ff453a; font-size: 13px; margin-bottom: 15px; display: none;">
       ⚠️ Lütfen geçerli bir anahtar girin.
     </div>
@@ -302,6 +511,138 @@
     </div>
   </div>
 </div>
+<div id="welcomeModal" class="modalOverlay" style="display:none;">
+  <div class="modalCard" style="max-width: 650px; min-height: 500px; display: flex; flex-direction: column;">
+    
+    <div class="modalTop">
+      <div>
+        <div class="modalTitle" id="welcomeTitle">🚀 Sınav Çözücü'ye Hoş Geldin!</div>
+        <div class="modalSub" id="welcomeStepText">Adım 1 / 3: Temel Hazırlık</div>
+      </div>
+      <button onclick="closeWelcomeModal()" class="modalClose">✕</button>
+    </div>
 
+    <div id="onboardingContent" class="onboarding-content" style="flex: 1; margin-top: 20px;">
+      </div>
+
+    <div class="modalActions" style="margin-top: 30px; display: flex; justify-content: space-between; align-items: center;">
+      <div id="stepDots" style="display: flex; gap: 8px;">
+        <span class="dot active"></span>
+        <span class="dot"></span>
+        <span class="dot"></span>
+      </div>
+      <div style="display: flex; gap: 10px;">
+        <button id="btnPrevStep" class="btn ghost" style="display: none;" onclick="changeStep(-1)">Geri</button>
+        <button id="btnNextStep" class="btn primary" onclick="changeStep(1)">Devam Et</button>
+      </div>
+    </div>
+  </div>
+</div>
+<div id="aiDisclaimer" class="ai-disclaimer-bar">
+  <div class="disclaimer-content">
+    <span class="d-icon">✨</span>
+    <span class="d-text">Ben yapay zeka destekli bir uygulamayım. Hata yapabilirim :) Cevaplarınızı teyit ediniz.</span>
+    
+    <button class="d-toggle-btn" onclick="toggleDisclaimer()" title="Gizle/Göster">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="6 9 12 15 18 9"></polyline>
+      </svg>
+    </button>
+  </div>
+</div>
+
+<div id="patiWidget" class="pati-widget">
+  
+  <div id="patiSpeech" class="pati-speech" style="display:none;">Hadi soru çözelim!</div>
+  
+  <div id="patiBubble" class="pati-bubble" style="opacity: 0;">
+    Hoşgeldin Elif! 🦴
+</div>
+
+  <div class="pati-container">
+    
+    <div style="display:flex; flex-direction:column; align-items:center;">
+        <div id="patiAvatar" class="pati-avatar">🐶</div>
+        <div id="patiLevelBadge" class="pati-lvl">LVL 1</div>
+    </div>
+    
+    <div class="pati-stats-area">
+        <div class="pati-bar-wrap" title="Tokluk Durumu">
+            <div id="patiSatietyBar" class="pati-bar-fill" style="width: 100%;"></div>
+        </div>
+        
+        <div class="food-counter">
+            <span>🍖 Stok:</span>
+            <span id="patiFoodCount" style="font-weight:bold; color:#d97706;">0</span>
+        </div>
+        
+        <div style="font-size:9px; color:#888; margin-top:2px;">Toplam: <span id="patiTotalFed">0</span></div>
+    </div>
+
+    <button class="btn-feed" onclick="PatiManager.feed()" title="1 Mama Ver">+ Besle</button>
+
+  </div>
+</div>
+<div id="reportModal" class="modalOverlay" style="display: none;">
+    <div class="modalCard report-card-fun">
+        
+        <div class="report-header">
+            <div class="bouncing-icon">🕵️‍♀️</div>
+            <h3>Dedektif İş Başında!</h3>
+            <p>Bir şeyler ters mi gidiyor yoksa harika bir fikrin mi var?</p>
+        </div>
+
+        <div class="modalBody">
+            
+            <div class="report-options">
+                <label class="r-option">
+                    <input type="radio" name="reportType" value="Hata" checked>
+                    <div class="opt-box bug">
+                        <span class="opt-icon">🐞</span>
+                        <span>Böcek Var!</span>
+                    </div>
+                </label>
+                
+                <label class="r-option">
+                    <input type="radio" name="reportType" value="Fikir">
+                    <div class="opt-box idea">
+                        <span class="opt-icon">💡</span>
+                        <span>Parlak Fikir</span>
+                    </div>
+                </label>
+
+                <label class="r-option">
+                    <input type="radio" name="reportType" value="Sevgi">
+                    <div class="opt-box love">
+                        <span class="opt-icon">💖</span>
+                        <span>Çok Sevdim</span>
+                    </div>
+                </label>
+            </div>
+
+            <textarea id="reportText" placeholder="Detayları buraya yaz şampiyon..." rows="4"></textarea>
+            
+            <div class="report-actions">
+                <button id="btnCancelReport" class="btn-ghost">Vazgeç</button>
+                <button id="btnSendReport" class="btn-send-rocket">
+                    Gönder Gitsin! 🚀
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+<div id="logoutModal" class="custom-modal-overlay" style="display: none;">
+    <div class="custom-modal-box">
+        <div class="modal-icon-top">👋</div>
+        <h3 class="modal-title">Gidiyor musun?</h3>
+        <p class="modal-desc">Oturumunu sonlandırmak istediğine emin misin? İlerlemeni kaydettin mi?</p>
+        
+        <div class="modal-actions">
+            <button id="btnCancelLogout" class="modal-btn secondary">Vazgeç</button>
+            <button id="btnConfirmLogout" class="modal-btn danger">Evet, Çıkış Yap</button>
+        </div>
+    </div>
+</div>
+<button id="btnReportBug" title="Bir sorun mu var?">🧐</button>
 </body>
 </html>

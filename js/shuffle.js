@@ -32,14 +32,15 @@ export function applyShuffle(parsed, { shuffleQ=true, shuffleO=true }){
         const picked = filled[i] ? filled[i] : { id: null, text: "" };
         byLetter[L] = picked;
       }
-      return { n: displayN, origN: q.origN, text: q.text, optionsByLetter: byLetter };
+      // subject'i koru (AI/etiket analizleri için kritik)
+      return { n: displayN, origN: q.origN, text: q.text, subject: q.subject || "Genel", optionsByLetter: byLetter };
     } else {
       const byLetter = {};
       for (const L of LETTERS){
         const found = opts.find(o => o.id === L) || { id: L, text: "" };
         byLetter[L] = found;
       }
-      return { n: displayN, origN: q.origN, text: q.text, optionsByLetter: byLetter };
+      return { n: displayN, origN: q.origN, text: q.text, subject: q.subject || "Genel", optionsByLetter: byLetter };
     }
   });
 

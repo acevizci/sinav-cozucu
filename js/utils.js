@@ -44,8 +44,3 @@ export function downloadBlob(content, filename, type){
   setTimeout(() => URL.revokeObjectURL(a.href), 1500);
 }
 
-export function csvCell(v){
-  v = String(v ?? "");
-  if (/[",\n]/.test(v)) v = `"${v.replaceAll('"','""')}"`;
-  return v;
-}

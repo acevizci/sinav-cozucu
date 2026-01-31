@@ -237,15 +237,7 @@ function buildBlocks(lines){
     if (isStandaloneNumberLine(l)){
       if (current.length) blocks.push(current);
       current = [l];
-
-      // sonraki boş olmayan satırı ekle (soru metni olabilir)
-      let j = i + 1;
-      while (j < lines.length && !cleanLine(lines[j])) j++;
-      if (j < lines.length){
-        current.push(cleanLine(lines[j]));
-        i = j;
-      }
-      continue;
+      continue; // soru metni/şıklar sonraki iterasyonlarda eklenecek
     }
 
     if (isInlineNumberLine(l)){
@@ -301,6 +293,14 @@ function buildQuestionFromBlock(block){
     questionText = lettered.before.replace(/^\d+\.\s+/, "").trim();
   }
 
+  // Konu etiketi: "[Konu] ..." varsa subject al + metinden temizle (null-safe)
+  let subject = "Genel";
+  if (questionText){
+    const mSub = String(questionText).match(/^\[(.*?)\]\s*/);
+    if (mSub && mSub[1]) subject = mSub[1].trim() || "Genel";
+    if (mSub) questionText = String(questionText).replace(/^\[.*?\]\s*/, "");
+  }
+
   // Try unlettered (StudyHall)
   if (!optionsByLetter){
     const startIdx = guessOptionsStart(before);
@@ -312,11 +312,9 @@ function buildQuestionFromBlock(block){
   if (!questionText){
     let cut = before.length;
 
-    // if we have lettered options, cut at first option-looking line
     const firstOpt = before.findIndex(x => /^[A-E]\s*[\)\.\-:]\s+/.test(cleanLine(x)));
     if (firstOpt !== -1) cut = firstOpt;
 
-    // if unlettered picked, use heuristic start
     if (optionsByLetter && cut === before.length){
       cut = Math.min(guessOptionsStart(before), before.length);
     }
@@ -331,13 +329,21 @@ function buildQuestionFromBlock(block){
     questionText = composed || seedText || "";
   }
 
+if (!questionText || !String(questionText).trim()){
+  console.warn("Empty question text:", { n, block });
+}
+
+
   return {
     origN: n,
-    text: questionText,
+    text: questionText || "",
+    subject,
     optionsByLetter: ensureAE(optionsByLetter),
     _answerFromSolution: ansFromSolution || null
   };
 }
+
+
 
 /* ================================
    AUTO DETECT
@@ -368,24 +374,37 @@ export function parseExam(text){
 
   const lines = splitLines(raw);
 
+  // Answer key bölümü genelde soru bloğu gibi görünüp yanlışlıkla "soru" üretebiliyor.
+  // Bu yüzden blokları, cevap anahtarı başlığından ÖNCEKİ kısım üzerinden kuruyoruz.
+  const keyStartIdx = lines.findIndex(l => /CEVAP\s+ANAHTAR|Cevap\s+Anahtar/i.test(l));
+  const contentLines = keyStartIdx === -1 ? lines : lines.slice(0, keyStartIdx);
+
   const format = detectFormat(raw, lines);
 
   const answerKey = parseAnswerKeyAll(raw);
 
-  const blocks = buildBlocks(lines);
+  const blocks = buildBlocks(contentLines);
 
   const questions = [];
   for (const b of blocks){
     const q = buildQuestionFromBlock(b);
     if (!q) continue;
 
-    questions.push({ origN: q.origN, text: q.text, optionsByLetter: q.optionsByLetter });
+   questions.push({ 
+  origN: q.origN, 
+  text: q.text, 
+  subject: q.subject,
+  optionsByLetter: q.optionsByLetter 
+});
+
 
     // Solution answer -> fill if missing
     if (q._answerFromSolution && !answerKey[q.origN]){
       answerKey[q.origN] = q._answerFromSolution;
     }
   }
+
+
 
   return {
     title: "Sınav",

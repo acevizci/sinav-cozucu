@@ -4,6 +4,12 @@ import { getChosenOptionId } from "./shuffle.js";
 const WRONG_BOOK_KEY = "sinav_v2_wrong_book_modular";
 const MAX_ITEMS = 1200;
 
+// ---------- Subject helpers (UI/analytics) ----------
+function normSubject(s){
+  const t = String(s || "Genel").trim();
+  return t || "Genel";
+}
+
 // ---------- Helpers ----------
 function nowMs(){ return Date.now(); }
 
@@ -145,6 +151,19 @@ export function loadWrongBook(){
     // normalize container
     if (!it.q) { it.q = { text: it.text || "" }; changed = true; }
 
+    // subject migration/normalization (older records may store at root)
+    if (!it.q.subject && it.subject){
+      it.q.subject = it.subject;
+      delete it.subject;
+      changed = true;
+    }
+    if (!it.q.subject){
+      it.q.subject = "Genel";
+      changed = true;
+    }
+    const ns = normSubject(it.q.subject);
+    if (it.q.subject !== ns){ it.q.subject = ns; changed = true; }
+
     // if optionsByLetter already good, skip
     const hasOBL = it.q.optionsByLetter && Object.values(it.q.optionsByLetter).some(o => (o?.text||"").trim());
     if (hasOBL) continue;
@@ -258,10 +277,15 @@ export function wrongBookDashboard(){
 
   const levelBuckets = { "0":0, "1":0, "2":0, "3":0, "4+":0 };
 
+  // ✅ NEW: konu bazlı istatistik
+  const bySubject = {};
+
   for (const it of items){
     ensureSrs(it);
     const s = it.srs.sm2;
     const t = s.due;
+
+    // global buckets (eski davranış)
     if (t <= now) { due++; dueToday++; }
     else if (t <= tomorrow) { dueTomorrow++; }
     else if (t <= next7) { dueNext7++; }
@@ -276,6 +300,43 @@ export function wrongBookDashboard(){
     else if (r === 2) levelBuckets["2"]++;
     else if (r === 3) levelBuckets["3"]++;
     else levelBuckets["4+"]++;
+
+    // ✅ NEW: per-subject aggregation (UI/SRS ekranı için)
+    const subj = normSubject(it?.q?.subject);
+    if (!bySubject[subj]){
+      bySubject[subj] = {
+        total: 0,
+        dueToday: 0,
+        dueTomorrow: 0,
+        dueNext7: 0,
+        later: 0,
+        learning: 0,
+        mature: 0,
+        efSum: 0,
+        efCount: 0
+      };
+    }
+    const b = bySubject[subj];
+    b.total++;
+
+    if (t <= now) b.dueToday++;
+    else if (t <= tomorrow) b.dueTomorrow++;
+    else if (t <= next7) b.dueNext7++;
+    else b.later++;
+
+    if (s.reps < 2) b.learning++;
+    else b.mature++;
+
+    b.efSum += s.ef;
+    b.efCount++;
+  }
+
+  // ✅ NEW: finalize avgEf per subject (ek alanları temizle)
+  for (const k in bySubject){
+    const b = bySubject[k];
+    b.avgEf = b.efCount ? (b.efSum / b.efCount) : 0;
+    delete b.efSum;
+    delete b.efCount;
   }
 
   return {
@@ -288,17 +349,22 @@ export function wrongBookDashboard(){
     learning,
     mature,
     avgEf: efCount ? (efSum/efCount) : 0,
-    buckets: levelBuckets
+    buckets: levelBuckets,
+
+    // ✅ NEW
+    bySubject
   };
 }
 
 // ---------- Wrong Book Export ----------
 export function exportWrongBook(){
   const book = loadWrongBook();
+  // include stable key for each item (used by HTML report for deep-link replay)
+  const items = Object.entries(book).map(([key, it]) => ({ ...it, _key: key }));
   return {
     exportedAt: nowIso(),
     count: Object.keys(book).length,
-    items: Object.values(book)
+    items
   };
 }
 
@@ -344,7 +410,7 @@ export function addToWrongBookFromExam({ parsed, answersMap, reviewId=null }){
         wrongCount: 0,
         blankCount: 0,
         note: "",
-        q: { text: q.text, optionsByLetter: q.optionsByLetter },
+        q: { text: q.text, subject: normSubject(q.subject), optionsByLetter: q.optionsByLetter },
         correctId: correctId || null,
         yourLetter: chosenLetter,
         yourId: chosenId || null,
@@ -357,7 +423,7 @@ export function addToWrongBookFromExam({ parsed, answersMap, reviewId=null }){
     rec.lastSeenAt = now;
     rec.lastTitle = parsed.title;
     rec.totalCount = (rec.totalCount || 0) + 1;
-    rec.q = { text: q.text, optionsByLetter: q.optionsByLetter };
+    rec.q = { text: q.text, subject: normSubject(q.subject || rec.q?.subject), optionsByLetter: q.optionsByLetter };
     rec.correctId = correctId || rec.correctId || null;
     rec.yourLetter = chosenLetter;
     rec.yourId = chosenId || null;
@@ -479,10 +545,23 @@ export function getSrsInfoForParsed(parsed){
 }
 
 // Build a parsed exam object from wrong book items (due-first if onlyDue)
-export function buildWrongOnlyParsed({ limit=60, onlyDue=false, fallbackAll=true } = {}){
+export function buildWrongOnlyParsed({ limit=60, onlyDue=false, fallbackAll=true, subject=null, keys=null } = {}){
   const book = loadWrongBook();
   let items = Object.values(book);
   if (!items.length) return null;
+
+  // Optional: build from explicit wrong-book keys (single-question replay)
+  if (Array.isArray(keys) && keys.length){
+    items = keys.map(k => book[k]).filter(Boolean);
+    if (!items.length) return null;
+  }
+
+  // Optional: filter by subject (case-insensitive exact match)
+  if (subject){
+    const target = normSubject(subject).toLowerCase();
+    items = items.filter(it => normSubject(it?.q?.subject).toLowerCase() === target);
+    if (!items.length) return null;
+  }
 
   if (onlyDue){
     const dueItems = items.filter(isDue);
@@ -510,6 +589,7 @@ export function buildWrongOnlyParsed({ limit=60, onlyDue=false, fallbackAll=true
     n: idx + 1,
     origN: idx + 1,
     text: it.q?.text || "",
+    subject: normSubject(it.q?.subject),
     optionsByLetter: it.q?.optionsByLetter || {}
   }));
 
@@ -522,7 +602,7 @@ export function buildWrongOnlyParsed({ limit=60, onlyDue=false, fallbackAll=true
   const keyCount = Object.keys(answerKey).length;
 
   return {
-    title: onlyDue ? "Tekrar (SRS)" : "Yanlış Defteri",
+    title: subject ? `Tekrar • ${normSubject(subject)}` : (onlyDue ? "Tekrar (SRS)" : "Yanlış Defteri"),
     questions,
     answerKey,
     keyCount,
