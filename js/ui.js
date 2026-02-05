@@ -3,9 +3,17 @@
 // ================= IMPORTS =================
 import { el, escapeHtml } from "./utils.js";
 import { LETTERS_CONST, getCorrectDisplayLetter, getChosenOptionId } from "./shuffle.js";
-import { loadWrongBook, saveWrongBook, wrongBookDashboard } from "./wrongBook.js";
+import { loadWrongBook, saveWrongBook, wrongBookDashboard, makeKeyFromQuestion } from "./wrongBook.js";
 
 // ================= SAFE HELPERS =================
+
+function isMissingOptionText(t){
+  const s = String(t ?? "").trim();
+  if (!s) return true;
+  const low = s.toLowerCase();
+  if (low === "görseldeki seçenek" || low === "gorseldeki secenek") return true;
+  return false;
+}
 function safe(id){ return document.getElementById(id); }
 function safeShow(id, display="block"){ const e=safe(id); if(e) e.style.display=display; }
 function safeHide(id){ const e=safe(id); if(e) e.style.display="none"; }
@@ -167,7 +175,7 @@ export function showWarn(msg){
   if (msg) showToast({ title:"Bildirim", msg, kind:"warn" });
 }
 
-export function showToast({ title="Bildirim", msg="", kind="ok", timeout=2600 }){
+export function showToast({ title="Bildirim", msg="", kind="ok", timeout=3600 }){
   const host = document.getElementById("toastHost");
   if (!host) return;
 
@@ -527,12 +535,31 @@ export async function runGeminiAnalysis(qN) {
     3. Kısa ve samimi ol. Türkçe cevap ver.
   `;
 
-  await callGeminiApi(apiKey, aiPrompt, (text) => {
+// ui.js - runGeminiAnalysis içindeki callGeminiApi bölümü:
+await callGeminiApi(apiKey, aiPrompt, (text) => {
     const formatted = text.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>").replace(/\n/g, "<br>");
     box.innerHTML = `<strong>🤖 Gemini Açıklaması:</strong><br><br>${formatted}`;
-  }, (err) => {
+
+    // 🔥 ANALİZİ DEFTERE İŞLEME MANTIĞI
+    try {
+        const book = loadWrongBook();
+        // Mevcut soru objesini kullanarak anahtarı (key) oluştur
+        const key = makeKeyFromQuestion(q); 
+        
+        if (book[key]) {
+            // Analiz verisini q objesinin içine göm
+            book[key].q.analysis = text; 
+            saveWrongBook(book);
+            console.log("✅ Analiz başarıyla kaydedildi:", key);
+        } else {
+            console.warn("⚠️ Soru defterde bulunamadı. Key:", key);
+        }
+    } catch (e) {
+        console.error("❌ Kayıt hatası:", e);
+    }
+}, (err) => {
     renderGeminiError(box, err);
-  });
+});
 }
 
 // ================= AI 2: BENZER SORU ÜRETİCİ (GENERATOR) =================
@@ -1136,8 +1163,10 @@ export function renderExam(state){
     const opts = qDiv.querySelector(".opts");
     for (const L of LETTERS_CONST){
       const opt = q.optionsByLetter?.[L];
-      const text = (opt?.text||"").trim();
-      if (!text) continue;
+      const rawText = (opt?.text ?? "");
+      const missing = isMissingOptionText(rawText);
+      const optHtml = missing ? `<span class="opt-missing-chip">PDF görsel</span>` : escapeHtml(String(rawText));
+
 
       const label=document.createElement("label");
       label.className="opt";
@@ -1147,7 +1176,7 @@ export function renderExam(state){
       }
       label.innerHTML=`
         <input type="radio" name="q${q.n}" value="${L}" ${chosen===L?"checked":""} ${state.mode!=="exam"?"disabled":""}>
-        <div><b>${L})</b> ${text}</div>
+        <div><b>${L})</b> ${optHtml}</div>
       `;
       
       // ---------------------------------------------------------
@@ -1293,18 +1322,25 @@ export function refreshNavColors(state) {
 
     if (qn === activeQn) btn.classList.add("active");
 
+    // answers bir Map olduğu için has() kontrolü en güvenlisidir
+    const hasAnswer = answers.has(qn) && answers.get(qn) !== null;
     const myAns = answers.get(qn);
+
     if (isResult) {
       const correctId = keyMap[qn];
-      const qObj = state.parsed.questions.find(x=>x.n===qn);
+      const qObj = state.parsed.questions.find(x => x.n === qn);
       const chosenId = qObj ? getChosenOptionId(qObj, myAns) : null;
       
-      if (!myAns) btn.classList.add("empty-result");
+      if (!hasAnswer) btn.classList.add("empty-result");
       else if (!correctId) btn.classList.add("answered");
       else if (chosenId === correctId) btn.classList.add("correct");
       else btn.classList.add("wrong");
     } else {
-      if (myAns) btn.classList.add("answered");
+      // ✅ SINAV ANI DÜZELTMESİ:
+      // Sadece 'myAns' kontrolü yetmez, Map'te bu soru var mı diye bakmalıyız.
+      if (hasAnswer) {
+        btn.classList.add("answered");
+      }
     }
   });
 }

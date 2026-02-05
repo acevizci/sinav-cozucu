@@ -7,19 +7,22 @@ export function applyShuffle(parsed, { shuffleQ=true, shuffleO=true }){
 
   if (shuffleQ) shuffleArray(srcQuestions);
 
-  // origN -> displayN
   const mapOriginalToDisplay = {};
+
   const questions = srcQuestions.map((q, idx) => {
     const displayN = idx + 1;
-    mapOriginalToDisplay[q.origN] = displayN;
 
-    // optionsByLetter: A..E -> {id,text}
+    const orig = q.origN ?? q.n ?? displayN;
+    mapOriginalToDisplay[orig] = displayN;
+
     let opts;
     if (Array.isArray(q.options)) {
       opts = q.options.map(o => ({...o}));
     } else {
-      // fallback: optionsByLetter -> array
-      opts = LETTERS.map(L => ({ id: L, text: (q.optionsByLetter?.[L]?.text || "") }));
+      opts = LETTERS.map(L => ({
+        id: L,
+        text: (q.optionsByLetter?.[L]?.text || "")
+      }));
     }
 
     if (shuffleO){
@@ -27,55 +30,80 @@ export function applyShuffle(parsed, { shuffleQ=true, shuffleO=true }){
       shuffleArray(filled);
 
       const byLetter = {};
+
       for (let i=0;i<LETTERS.length;i++){
         const L = LETTERS[i];
-        const picked = filled[i] ? filled[i] : { id: null, text: "" };
-        byLetter[L] = picked;
+
+        if (filled[i]){
+          byLetter[L] = {
+            id: filled[i].id,
+            text: filled[i].text
+          };
+        } else {
+          byLetter[L] = { id: null, text: "" };
+        }
       }
-      // subject'i koru (AI/etiket analizleri için kritik)
-      return { n: displayN, origN: q.origN, text: q.text, subject: q.subject || "Genel", optionsByLetter: byLetter };
+
+      return {
+        n: displayN,
+        origN: orig,
+        text: q.text,
+        subject: q.subject || "Genel",
+        optionsByLetter: byLetter
+      };
+
     } else {
       const byLetter = {};
       for (const L of LETTERS){
         const found = opts.find(o => o.id === L) || { id: L, text: "" };
-        byLetter[L] = found;
+        byLetter[L] = { id: found.id, text: found.text };
       }
-      return { n: displayN, origN: q.origN, text: q.text, subject: q.subject || "Genel", optionsByLetter: byLetter };
+
+      return {
+        n: displayN,
+        origN: orig,
+        text: q.text,
+        subject: q.subject || "Genel",
+        optionsByLetter: byLetter
+      };
     }
   });
 
-  // answerKeyDisplay: displayN -> correctOptionId (A-E)
-  // (doğru harf değil, doğru şıkkın "id"si)
   const answerKeyDisplay = {};
+
   for (const [origNStr, correctId] of Object.entries(parsed.answerKey || {})){
     const origN = Number(origNStr);
     const displayN = mapOriginalToDisplay[origN];
     if (!displayN) continue;
+
     answerKeyDisplay[displayN] = String(correctId).toUpperCase();
   }
-
-  const keyCount = Object.keys(answerKeyDisplay).length;
 
   return {
     title: parsed.title,
     questions,
-    answerKey: answerKeyDisplay, // displayN -> optionId
-    keyCount,
+    answerKey: answerKeyDisplay,
+    keyCount: Object.keys(answerKeyDisplay).length,
     mapOriginalToDisplay
   };
 }
 
 export function getCorrectDisplayLetter(question, correctOptionId){
-  // correctOptionId: 'A'..'E'
-  if (!correctOptionId) return null;
+  if (!question || !correctOptionId) return null;
+
   for (const L of LETTERS){
-    if ((question.optionsByLetter[L]?.id || "").toUpperCase() === correctOptionId.toUpperCase()) return L;
+    if (
+      (question.optionsByLetter?.[L]?.id || "")
+        .toUpperCase() === correctOptionId.toUpperCase()
+    ){
+      return L;
+    }
   }
   return null;
 }
 
 export function getChosenOptionId(question, chosenLetter){
-  if (!chosenLetter) return null;
+  if (!question || !chosenLetter) return null;
   return question.optionsByLetter?.[chosenLetter]?.id || null;
 }
 

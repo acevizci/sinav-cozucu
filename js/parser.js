@@ -1,22 +1,20 @@
-// js/parser.js (parser_v10 - Auto Engine Universal Parser)
-// Tek hedef: Dosya formatını otomatik algıla ve en uygun parser ile "soru/şık kaçırmadan" ayrıştır.
-//
-// Supported:
-// - StudyHall/Çözüm: "Çözüm: A" / harfsiz şık heuristiği
-// - Inline options: "... A) ... B) ... C) ..."
-// - Classic multi-line options: "A) ..." satır satır
-// - Standalone number line: "1." satır, soru metni sonraki satır
-// - Answer key variants: "1-C | 2-C", "1. B", "B | 2. B", "CEVAP ANAHTARI" / "Cevap Anahtarı"
+// js/parser.js (parser_v11 - Auto Engine Universal Parser)
+// Goal: formatı otomatik algıla; soru/şık kaçırmadan ayrıştır; output kontratını garanti et.
 //
 // Output contract:
-// parseExam(text) -> { title, questions:[{origN,text,optionsByLetter}], answerKey:{[origN]:'A'..'E'}, keyCount, meta }
+// parseExam(text) -> {
+//   title,
+//   questions:[{ n, origN, text, subject, optionsByLetter }],
+//   answerKey:{[n]:'A'..'E'},
+//   keyCount,
+//   meta
+// }
 //
-// DOCX helper:
-// readFileAsText(file), parseFromFile(file)
-// NOTE: mammoth must be loaded globally.
+// NOTE: pdf.js + mammoth global olmalı.
 
 import { normalizeText } from "./utils.js";
 
+const ENGINE_VERSION = "v11";
 const LETTERS = ["A","B","C","D","E"];
 const SOLUTION_MARK = /^(çözüm|cozum|cevap|answer)\b/i;
 
@@ -46,7 +44,6 @@ function extractAnswerFromSolution(lines){
 ================================ */
 
 function sliceAnswerKeySection(text){
-  // "Cevap Anahtarı" veya "CEVAP ANAHTARI" veya "✅ CEVAP ANAHTARI"
   const idx = text.search(/CEVAP\s+ANAHTAR|Cevap\s+Anahtar/i);
   if (idx < 0) return null;
   return text.slice(idx);
@@ -73,7 +70,6 @@ function parseAnswerKeyClassic(text){
 }
 
 function parseAnswerKeyPipes(text){
-  // "B | 2. B | 3. C" (ilk parça numarasız olabilir)
   const part = sliceAnswerKeySection(text);
   if (!part) return {};
   const lines = part.split("\n").map(cleanLine).filter(Boolean);
@@ -81,11 +77,9 @@ function parseAnswerKeyPipes(text){
   let q = 1;
   const key = {};
   for (const ln of lines){
-    if (/^.*CEVAP\s+ANAHTAR/i.test(ln) || /^.*Cevap\s+Anahtar/i.test(ln)) continue;
+    if (/CEVAP\s+ANAHTAR|Cevap\s+Anahtar/i.test(ln)) continue;
 
     const chunks = ln.split("|").map(x => cleanLine(x)).filter(Boolean);
-    if (!chunks.length) continue;
-
     for (const ch of chunks){
       let m = ch.match(/^(\d{1,4})\s*[\.\)\-:]?\s*([A-E])\b/i);
       if (m){
@@ -105,7 +99,6 @@ function parseAnswerKeyPipes(text){
 }
 
 function parseAnswerKeyDot(text){
-  // "1. B" satır satır (özellikle TR final denemeler)
   const key = {};
   const re = /(?:^|\n)\s*(\d{1,4})\.\s*([A-E])\b/gi;
   let m;
@@ -117,7 +110,7 @@ function parseAnswerKeyDot(text){
 
 function parseAnswerKeyAll(raw){
   const section = sliceAnswerKeySection(raw) || raw;
-  // Öncelik: daha spesifik olanlar son overwrite etsin
+  // daha genel -> daha spesifik override
   const k1 = parseAnswerKeyClassic(section);
   const k2 = parseAnswerKeyDot(section);
   const k3 = parseAnswerKeyPipes(raw);
@@ -177,7 +170,7 @@ function looksLikeOptionLine(s){
   const t = cleanLine(s);
   if (!t) return false;
   if (SOLUTION_MARK.test(t)) return false;
-  if (/\?\s*$/.test(t)) return false;
+  if (/\?\s*$/.test(t)) return false; // soru satırı olabilir
   if (t.length < 3 || t.length > 260) return false;
   return true;
 }
@@ -194,8 +187,11 @@ function inferOptionCount(answerLetter, candidatesCount){
 function guessOptionsStart(lines){
   const qMarkIdx = lines.findIndex(l => l.includes("?"));
   if (qMarkIdx !== -1) return qMarkIdx + 1;
+
   const letterIdx = lines.findIndex(l => /^[A-E]\s*[\)\.\-:]\s+/.test(l));
   if (letterIdx !== -1) return letterIdx;
+
+  // fallback: ilk satır numara ise 1, değilse 0
   return 1;
 }
 
@@ -217,13 +213,14 @@ function extractOptionsUnlettered(lines, startIdx, endIdx, answerLetter){
 function ensureAE(optionsByLetter){
   const out = {};
   for (const L of LETTERS){
-    out[L] = { id: L, text: (optionsByLetter?.[L]?.text || "").trim() };
+    const txt = (optionsByLetter?.[L]?.text || "").trim();
+    out[L] = { id: L, text: txt || "Görseldeki Seçenek" };
   }
   return out;
 }
 
 /* ================================
-   BLOCK BUILDER (robust)
+   BLOCK BUILDER
 ================================ */
 
 function buildBlocks(lines){
@@ -234,13 +231,7 @@ function buildBlocks(lines){
     const l = cleanLine(lines[i]);
     if (!l) continue;
 
-    if (isStandaloneNumberLine(l)){
-      if (current.length) blocks.push(current);
-      current = [l];
-      continue; // soru metni/şıklar sonraki iterasyonlarda eklenecek
-    }
-
-    if (isInlineNumberLine(l)){
+    if (isQuestionStart(l)){
       if (current.length) blocks.push(current);
       current = [l];
       continue;
@@ -264,10 +255,36 @@ function extractNumberAndSeed(firstLine, nextLine){
   m = a.match(/^(\d+)\s*[\.\)]\s*$/);
   if (m) return { n: Number(m[1]), seedText: cleanLine(nextLine || "") };
 
+  // weak fallback
   m = a.match(/^(\d+)\D/);
   if (m) return { n: Number(m[1]), seedText: a.replace(/^\d+\D+/, "").trim() };
 
   return { n: null, seedText: a };
+}
+
+function extractSubjectAndStripPrefix(questionText){
+  let text = String(questionText || "").trim();
+  let subject = "Genel";
+
+  // "[Konu] ..." -> subject
+  const mSub = text.match(/^\[(.*?)\]\s*/);
+  if (mSub && mSub[1]) {
+    subject = mSub[1].trim() || "Genel";
+    text = text.replace(/^\[.*?\]\s*/, "");
+  }
+
+  // "1." "1)" prefix
+  text = text.replace(/^\d+\s*[\.\)]\s*/, "").trim();
+
+  return { subject, text };
+}
+
+// Answer key gibi yoğun pattern blokları ele (guard)
+function looksLikeAnswerKeyBlock(blockLines){
+  const t = blockLines.join(" ");
+  const hits = (t.match(/\b\d{1,4}\s*[-:\.]\s*[A-E]\b/gi) || []).length;
+  // 8+ eşleşme genelde anahtar listesi
+  return hits >= 8 && blockLines.length <= 12;
 }
 
 /* ================================
@@ -275,6 +292,9 @@ function extractNumberAndSeed(firstLine, nextLine){
 ================================ */
 
 function buildQuestionFromBlock(block){
+  if (!block || !block.length) return null;
+  if (looksLikeAnswerKeyBlock(block)) return null;
+
   const solIdx = findSolutionIndex(block);
   const before = solIdx === -1 ? block : block.slice(0, solIdx);
   const after  = solIdx === -1 ? []    : block.slice(solIdx);
@@ -284,31 +304,24 @@ function buildQuestionFromBlock(block){
 
   const ansFromSolution = extractAnswerFromSolution(after);
 
-  // Try lettered (inline or multiline)
+  // 1) lettered (inline or multiline)
   const lettered = extractOptionsLettered(before);
   let optionsByLetter = lettered?.optionsByLetter || null;
 
+  // 2) questionText candidate
   let questionText = null;
   if (lettered && lettered.before){
-    questionText = lettered.before.replace(/^\d+\.\s+/, "").trim();
+    questionText = lettered.before.trim();
   }
 
-  // Konu etiketi: "[Konu] ..." varsa subject al + metinden temizle (null-safe)
-  let subject = "Genel";
-  if (questionText){
-    const mSub = String(questionText).match(/^\[(.*?)\]\s*/);
-    if (mSub && mSub[1]) subject = mSub[1].trim() || "Genel";
-    if (mSub) questionText = String(questionText).replace(/^\[.*?\]\s*/, "");
-  }
-
-  // Try unlettered (StudyHall)
+  // 3) unlettered heuristic (StudyHall)
   if (!optionsByLetter){
     const startIdx = guessOptionsStart(before);
     const un = extractOptionsUnlettered(before, startIdx, before.length, ansFromSolution);
     optionsByLetter = un?.optionsByLetter || null;
   }
 
-  // Fallback for classic: question text is everything until first option line
+  // 4) fallback question text: up to first option
   if (!questionText){
     let cut = before.length;
 
@@ -322,28 +335,27 @@ function buildQuestionFromBlock(block){
     const composed = before
       .slice(0, cut)
       .join(" ")
-      .replace(/^\d+\s*[\.\)]\s*/, "")
       .replace(/\s+/g, " ")
       .trim();
 
     questionText = composed || seedText || "";
   }
 
-if (!questionText || !String(questionText).trim()){
-  console.warn("Empty question text:", { n, block });
-}
+  const { subject, text } = extractSubjectAndStripPrefix(questionText);
 
+  if (!text || !text.trim()){
+    console.warn("Empty question text:", { n, block });
+  }
 
   return {
+    n,                 // ✅ contract
     origN: n,
-    text: questionText || "",
+    text: text || "",
     subject,
     optionsByLetter: ensureAE(optionsByLetter),
     _answerFromSolution: ansFromSolution || null
   };
 }
-
-
 
 /* ================================
    AUTO DETECT
@@ -370,17 +382,15 @@ function detectFormat(raw, lines){
 
 export function parseExam(text){
   const raw = normalizeText(text);
-  if (!raw) return { title:"Sınav", questions:[], answerKey:{}, keyCount:0, meta:{format:"empty"} };
+  if (!raw) return { title:"Sınav", questions:[], answerKey:{}, keyCount:0, meta:{ format:"empty", engine: ENGINE_VERSION } };
 
   const lines = splitLines(raw);
 
-  // Answer key bölümü genelde soru bloğu gibi görünüp yanlışlıkla "soru" üretebiliyor.
-  // Bu yüzden blokları, cevap anahtarı başlığından ÖNCEKİ kısım üzerinden kuruyoruz.
+  // Key başlığı varsa soru bloğu üretmesin diye öncesini al
   const keyStartIdx = lines.findIndex(l => /CEVAP\s+ANAHTAR|Cevap\s+Anahtar/i.test(l));
   const contentLines = keyStartIdx === -1 ? lines : lines.slice(0, keyStartIdx);
 
   const format = detectFormat(raw, lines);
-
   const answerKey = parseAnswerKeyAll(raw);
 
   const blocks = buildBlocks(contentLines);
@@ -390,28 +400,27 @@ export function parseExam(text){
     const q = buildQuestionFromBlock(b);
     if (!q) continue;
 
-   questions.push({ 
-  origN: q.origN, 
-  text: q.text, 
-  subject: q.subject,
-  optionsByLetter: q.optionsByLetter 
-});
-
+    // ✅ Keep contract stable
+    questions.push({
+      n: q.n,
+      origN: q.origN,
+      text: q.text,
+      subject: q.subject,
+      optionsByLetter: q.optionsByLetter
+    });
 
     // Solution answer -> fill if missing
-    if (q._answerFromSolution && !answerKey[q.origN]){
-      answerKey[q.origN] = q._answerFromSolution;
+    if (q._answerFromSolution && !answerKey[q.n]){
+      answerKey[q.n] = q._answerFromSolution;
     }
   }
-
-
 
   return {
     title: "Sınav",
     questions,
     answerKey,
     keyCount: Object.keys(answerKey).length,
-    meta: { format, blocks: blocks.length }
+    meta: { format, blocks: blocks.length, engine: ENGINE_VERSION }
   };
 }
 
@@ -425,7 +434,6 @@ async function docxArrayBufferToText(buf){
   const html = r.value || "";
   const doc = new DOMParser().parseFromString(html, "text/html");
 
-  // Geniş kapsam: satırları korumak için p/li yanında br de sayıyoruz
   const parts = [];
   const walk = (node) => {
     if (!node) return;
@@ -434,8 +442,7 @@ async function docxArrayBufferToText(buf){
       return;
     }
     if (node.nodeType === 3){
-      const t = node.textContent || "";
-      parts.push(t);
+      parts.push(node.textContent || "");
       return;
     }
     if (node.nodeType === 1){
@@ -458,18 +465,13 @@ async function docxArrayBufferToText(buf){
     .join("\n");
 }
 
-
-
-
 /* ================= PDF helpers ================= */
 
 async function pdfArrayBufferToText(buf){
-  // pdf.js must be loaded globally (index.html)
   if (typeof pdfjsLib === "undefined"){
     throw new Error("pdf.js bulunamadı. index.html'de pdf.js yüklü olmalı.");
   }
 
-  // Ensure workerSrc for CDN usage
   if (!pdfjsLib.GlobalWorkerOptions.workerSrc){
     pdfjsLib.GlobalWorkerOptions.workerSrc =
       "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
@@ -481,9 +483,17 @@ async function pdfArrayBufferToText(buf){
   for (let p = 1; p <= pdf.numPages; p++){
     const page = await pdf.getPage(p);
     const content = await page.getTextContent();
-    const items = content.items || [];
+    const items = (content.items || [])
+      .map(it => ({
+        str: (it.str || "").trim(),
+        x: it.transform?.[4] ?? 0,
+        y: it.transform?.[5] ?? 0
+      }))
+      .filter(it => it.str);
 
-    // Group items into lines by Y coordinate
+    // ✅ deterministic reading order
+    items.sort((a,b) => (b.y - a.y) || (a.x - b.x));
+
     let lastY = null;
     let line = [];
 
@@ -494,22 +504,19 @@ async function pdfArrayBufferToText(buf){
     };
 
     for (const it of items){
-      const str = (it.str || "").trim();
-      if (!str) continue;
-
-      const y = it.transform?.[5];
+      const y = it.y;
       if (lastY == null){
         lastY = y;
-        line.push(str);
+        line.push(it.str);
         continue;
       }
 
-      // New line threshold (tweakable)
-      if (Math.abs(y - lastY) > 2.5){
+      // line threshold: PDF'ler arası tolerans için biraz büyüttük
+      if (Math.abs(y - lastY) > 3.5){
         flush();
         lastY = y;
       }
-      line.push(str);
+      line.push(it.str);
     }
 
     flush();
@@ -518,7 +525,6 @@ async function pdfArrayBufferToText(buf){
 
   return parts.join("\n").trim();
 }
-
 
 export async function readFileAsText(file){
   const name = (file?.name || "").toLowerCase();

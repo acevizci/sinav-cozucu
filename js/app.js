@@ -1,3 +1,4 @@
+import { getPatiLevel, _getStreak } from "./pati.js";
 import { el, normalizeText, downloadBlob, formatTime } from "./utils.js";
 import { parseExam, readFileAsText } from "./parser.js";
 import { applyShuffle } from "./shuffle.js";
@@ -198,6 +199,8 @@ const state = {
   timeLeftSec: null,
   shuffleQ: true,
   shuffleO: true,
+  questionTimes: new Map(), // Soru Numarası -> Saniye
+  lastActionAt: null,       // Son etkileşim zamanı (timestamp)
 
   // SRS / Review
   srsReview: false,
@@ -394,22 +397,31 @@ async function doParse({ autoStartHint=true } = {}){
 }
 
 /* ================= EXAM FLOW ================= */
-function startExam({ resume=false } = {}){
+function startExam({ resume = false } = {}) {
   if (!state.parsed) return;
 
   state.mode = "exam";
+  
+  // ✨ ZAMAN TAKİBİ GÜNCELLEMESİ
+  state.lastActionAt = Date.now(); 
+  
+  // Eğer yeni sınavsa Map'i sıfırla, devam ediyorsa mevcut Map'i koru veya yoksa oluştur
+  if (!resume || !state.questionTimes) {
+    state.questionTimes = new Map();
+  }
+
   syncGlobals();
   if (!state.startedAt) state.startedAt = new Date().toISOString();
 
   state.durationSec = Number(el("durationMin").value) * 60;
 
-  if (!resume){
+  if (!resume) {
     state.timeLeftSec = state.durationSec;
   } else {
     if (state.timeLeftSec == null) state.timeLeftSec = state.durationSec;
   }
 
-  timer.start(() => state.timeLeftSec, v => state.timeLeftSec = v);
+  timer.start(() => state.timeLeftSec, (v) => (state.timeLeftSec = v));
 
   const fm = el("focusMode");
   applyFocusMode(!!(fm && fm.checked));
@@ -426,11 +438,18 @@ function finishExam(){
   timer.stop();
   applyFocusMode(false);
 
-  // SRS review session id (needed for SM-2 override buttons)
+  // SRS review session id
   state.srsReview = /Tekrar \(SRS\)/i.test(state.parsed.title || "");
   state.lastReviewId = state.srsReview ? (new Date().toISOString()) : null;
 
-  addToWrongBookFromExam({ parsed: state.parsed, answersMap: state.answers, reviewId: state.lastReviewId });
+  // ✨ KRİTİK GÜNCELLEME: Zaman haritasını deftere gönderiyoruz
+  addToWrongBookFromExam({ 
+    parsed: state.parsed, 
+    answersMap: state.answers, 
+    questionTimes: state.questionTimes, // Zaman verisi artık deftere işlenecek
+    reviewId: state.lastReviewId 
+  });
+
   state.srsInfo = state.srsReview ? getSrsInfoForParsed(state.parsed) : {};
 
   const total = state.parsed.questions.length;
@@ -462,8 +481,6 @@ function finishExam(){
   }
 
   const denom = total - keyMissing;
-  // Eğer hiç anahtar yoksa skor hesaplanamaz.
-  // Anahtar kısmi ise, skoru sadece anahtarı olan sorular üzerinden hesapla.
   const score = denom > 0 ? Math.round((correct/denom)*100) : null;
 
   const spent = state.durationSec - (state.timeLeftSec ?? state.durationSec);
@@ -632,205 +649,213 @@ safeBind("btnSrsDash", () => {
   openSrsModal(d);
 });
 
-/// Hata Raporu İndir (HTML) - GÜVENLİ BAĞLAMA
+// app.js - Süre Rozetli, Çift Panel Sabitlenmiş ve Glassmorphism Dashboard
 safeBind("btnExportWrongBook", () => {
   const data = exportWrongBook();
-
   if (!data || !data.items || data.items.length === 0) {
     showWarn("Yanlış defterin tamamen boş.");
     return;
   }
 
-  // --- FİLTRELEME: Sadece 'YANLIS' olanları al (Boşları at) ---
   const onlyWrongs = data.items.filter(item => item.status === "YANLIS");
-
   if (onlyWrongs.length === 0) {
-    showWarn("Harika! Hiç yanlışın yok (Sadece boşlar var).");
+    showWarn("Analiz edilecek hatalı soru bulunamadı.");
     return;
   }
 
-  // --- HTML OLUŞTURMA ---
   const now = new Date().toLocaleDateString("tr-TR");
+  const wrongCount = onlyWrongs.length;
 
-  // Basitleştirilmiş CSS (Sadece Yanlış odaklı)
+  // --- 1. VERİ ANALİZİ ---
+  const subjectMap = {};
+  onlyWrongs.forEach(it => {
+    const s = it.q.subject || "Genel";
+    subjectMap[s] = (subjectMap[s] || 0) + 1;
+  });
+
+  const topSubjects = Object.entries(subjectMap).sort((a, b) => b[1] - a[1]).slice(0, 3);
+  const focusHtml = topSubjects.map(([sub, count], i) => `
+    <div style="display:flex; align-items:center; gap:12px; margin-bottom:14px;">
+      <span style="background:linear-gradient(135deg, #a855f7, #6366f1); color:white; min-width:24px; height:24px; display:flex; align-items:center; justify-content:center; border-radius:50%; font-size:11px; font-weight:800; box-shadow: 0 4px 12px rgba(168,85,247,0.3);">${i+1}</span>
+      <div style="flex:1;">
+        <div style="font-size:13px; font-weight:600; color:#fff;">${sub}</div>
+        <div style="font-size:10px; color:var(--muted); opacity:0.8;">${count} Hata</div>
+      </div>
+    </div>
+  `).join("");
+
+  // --- 2. PATİ VERİLERİ (pati.js Entegrasyonu) ---
+  const patiLevel = typeof getPatiLevel === "function" ? getPatiLevel() : 1;
+  const patiSatiety = window.PatiManager?.satiety || 100;
+  const patiStreak = typeof _getStreak === "function" ? _getStreak() : 0;
+  const userName = (localStorage.getItem('user_name') || "Elif").split(' ')[0];
+
+  let patiTitle = "Gelişmekte Olan Pati";
+  let patiMsg = `${userName}, hataların üzerine giderek beni çok mutlu ediyorsun! 🌟`;
+  let patiIcon = "🐾";
+  let patiColor = "var(--accent)";
+
+  if (patiSatiety < 30) {
+    patiIcon = "🥺";
+    patiMsg = `Karnım çok acıktı... 🍖 Beni beslemeyi unutma ${userName}, yoksa odaklanamıyorum! 🥣✨`;
+    patiColor = "#fbbf24";
+  } else if (patiStreak >= 5) {
+    patiIcon = "🔥";
+    patiTitle = "Efsanevi İz Sürücü";
+    patiMsg = `${patiStreak} gündür süper gidiyoruz! 🏆 Gurur duyuyorum! 🚀💪`;
+    patiColor = "#ef4444";
+  } else {
+    patiIcon = "🐕‍🦺";
+    patiMsg = `Selam ${userName}! Bugün harika bir analiz günü. 🌈 Hatalarını beraber temizleyelim mi? 🧼💎`;
+  }
+
+  // --- 3. CSS TASARIMI (SABİT BG + GERÇEK GLASSMORPHISM) ---
   const css = `
-    :root { --bg:#09090b; --card:#18181b; --text:#e4e4e7; --bad:#ef4444; --ok:#22c55e; --muted:#71717a; --border:#27272a; }
-    body { background:var(--bg); color:var(--text); font-family:'Segoe UI', system-ui, sans-serif; padding:40px 20px; max-width:800px; margin:0 auto; line-height:1.5; }
-    h1 { font-size:24px; font-weight:800; margin-bottom:10px; color:#fff; display:flex; align-items:center; gap:10px; }
-    .meta { color:var(--muted); font-size:13px; margin-bottom:40px; border-bottom:1px solid var(--border); padding-bottom:20px; }
+    :root { 
+      --bg: #050508; --glass: rgba(255, 255, 255, 0.03);
+      --accent: #a855f7; --text: #f4f4f5; --muted: #a1a1aa;
+      --border: rgba(255, 255, 255, 0.1);
+      --red-glass: rgba(239, 68, 68, 0.15);
+      --green-glass: rgba(34, 197, 94, 0.15);
+    }
+    body { 
+      background: radial-gradient(circle at 0% 0%, #1e1b4b 0%, #050508 50%) fixed; 
+      color: var(--text); font-family: 'Inter', system-ui, sans-serif; padding: 40px 20px; 
+      margin: 0; line-height: 1.6; display: flex; gap: 35px; justify-content: center; align-items: flex-start;
+    }
+    .main-content { max-width: 700px; width: 100%; }
+    
+    .panel { position: sticky; top: 40px; background: rgba(255, 255, 255, 0.04); backdrop-filter: blur(25px) saturate(180%); -webkit-backdrop-filter: blur(25px) saturate(180%); border: 1px solid var(--border); border-radius: 28px; padding: 25px; box-shadow: 0 20px 50px rgba(0,0,0,0.4); }
+    .left-panel { width: 280px; min-width: 280px; border-color: ${patiColor}44; }
+    .right-panel { width: 300px; min-width: 300px; }
 
-    .filters { margin:-10px 0 26px; padding:14px 14px 16px; border:1px solid var(--border); border-radius:12px; background:rgba(255,255,255,0.02); }
-    .filtersTitle { font-size:12px; text-transform:uppercase; letter-spacing:0.6px; color:var(--muted); margin-bottom:10px; }
-    .chips { display:flex; flex-wrap:wrap; gap:8px; }
-    .chip { cursor:pointer; border:1px solid var(--border); background:rgba(255,255,255,0.03); color:var(--text); padding:8px 10px; border-radius:999px; font-size:12px; display:inline-flex; align-items:center; gap:8px; }
-    .chip:hover { background:rgba(255,255,255,0.06); }
-    .chip.active { border-color:rgba(168,85,247,0.6); box-shadow:0 0 0 2px rgba(168,85,247,0.12) inset; }
-    .chipCount { background:rgba(255,255,255,0.07); padding:2px 8px; border-radius:999px; font-variant-numeric:tabular-nums; }
-    .filtersHint { margin-top:10px; font-size:12px; color:var(--muted); line-height:1.4; }
+    .header { margin-bottom: 30px; border-bottom: 1px solid var(--border); padding-bottom: 20px; }
+    .header h1 { font-size: 24px; margin: 0; background: linear-gradient(to right, #fff, #c084fc); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 800; }
+
+    .card { background: rgba(255, 255, 255, 0.03); backdrop-filter: blur(10px); border: 1px solid var(--border); border-radius: 22px; padding: 24px; margin-bottom: 30px; }
     
-    .card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:24px; margin-bottom:24px; position:relative; overflow:hidden; }
-    .card::before { content:''; position:absolute; left:0; top:0; bottom:0; width:4px; background:var(--bad); }
+    .q-header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; }
+    .q-subject-pill { background: rgba(168, 85, 247, 0.18); color: #d8b4fe; padding: 5px 12px; border-radius: 10px; font-size: 10px; font-weight: 800; text-transform: uppercase; border: 1px solid rgba(168, 85, 247, 0.3); }
+    .q-time-pill { padding: 5px 12px; border-radius: 10px; font-size: 10px; font-weight: 800; display: flex; align-items: center; gap: 6px; border: 1px solid transparent; }
+
+    .q-text { font-size: 16px; margin-bottom: 18px; font-weight: 500; color: #fff; }
+    .opt { padding: 12px; margin: 8px 0; border-radius: 12px; background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border); display: flex; align-items: center; gap: 12px; font-size: 14px; }
+    .opt.wrong { background: var(--red-glass) !important; border-color: rgba(239, 68, 68, 0.4) !important; color: #fca5a5; }
+    .opt.correct { background: var(--green-glass) !important; border-color: rgba(34, 197, 94, 0.4) !important; color: #86efac; }
     
-    .q-meta { display:flex; justify-content:space-between; margin-bottom:16px; font-size:12px; color:var(--muted); font-weight:600; letter-spacing:0.5px; text-transform:uppercase; }
-    .q-text { font-size:17px; margin-bottom:20px; color:#fafafa; font-weight:500; }
-    .subjLine { margin:-10px 0 14px; color:var(--muted); font-size:12px; }
-    .actions { margin:14px 0 0; display:flex; justify-content:flex-end; }
-    .btnReplay { cursor:pointer; border:1px solid var(--border); background:rgba(168,85,247,0.12); color:#e9d5ff; padding:9px 12px; border-radius:10px; font-size:12px; font-weight:650; }
-    .btnReplay:hover { background:rgba(168,85,247,0.18); }
+    .ai-analysis { margin-top: 18px; padding: 16px; border-radius: 14px; background: rgba(168, 85, 247, 0.08); border: 1px dashed rgba(168, 85, 247, 0.3); }
+    .panel-section-title { font-size: 12px; font-weight: 800; margin-bottom: 20px; color: var(--accent); text-transform: uppercase; letter-spacing: 1px; }
+    .bar-bg { height: 7px; background: rgba(255,255,255,0.08); border-radius: 4px; overflow: hidden; margin-top: 5px; }
+    .bar-fill { height: 100%; background: linear-gradient(to right, #a855f7, #6366f1); }
+    .divider { height: 1px; background: var(--border); margin: 20px 0; }
     
-    .opt { padding:10px 14px; margin:6px 0; border-radius:8px; background:rgba(255,255,255,0.03); font-size:15px; display:flex; gap:12px; align-items:center; border:1px solid transparent; }
-    
-    /* Sadece Yanlış ve Doğruyu vurgula */
-    .opt.wrong { background:rgba(239,68,68,0.15); border-color:rgba(239,68,68,0.5); color:#fca5a5; }
-    .opt.correct { background:rgba(34,197,94,0.15); border-color:rgba(34,197,94,0.5); color:#86efac; }
-    
-    .stat-row { margin-top:16px; padding-top:15px; border-top:1px solid var(--border); font-size:12px; color:var(--muted); display:flex; flex-wrap:wrap; gap:12px 18px; }
+    .pati-badge { font-size: 45px; margin: 0 auto 15px; background: rgba(255,255,255,0.05); width: 85px; height: 85px; display: flex; align-items: center; justify-content: center; border-radius: 50%; border: 2px solid ${patiColor}44; box-shadow: 0 0 20px ${patiColor}22; }
+
+    @media (max-width: 1300px) { body { flex-direction: column; align-items: center; } .panel { position: relative; top: 0; width: 100%; max-width: 700px; margin-bottom: 25px; } }
   `;
 
-  // subject chips (for filtering)
-  const subjCounts = {};
-  for (const it of onlyWrongs){
-    const s = String(it?.q?.subject || "Genel").trim() || "Genel";
-    subjCounts[s] = (subjCounts[s] || 0) + 1;
-  }
-  const subjOrder = Object.keys(subjCounts).sort((a,b)=> subjCounts[b]-subjCounts[a] || a.localeCompare(b));
-  const chipsHtml = subjOrder.map(s => {
-    const c = subjCounts[s];
-    return `<button class="chip" data-subject="${s.replace(/"/g,'&quot;')}">${s} <span class="chipCount">${c}</span></button>`;
-  }).join("");
-
-  const itemsHtml = onlyWrongs.map((item, idx) => {
+  // --- 4. SORU SATIRLARI ---
+  const rows = onlyWrongs.map((item, idx) => {
     const q = item.q;
-    const subject = String(q?.subject || "Genel").trim() || "Genel";
-
-    // SRS meta
-    const sm2 = item?.srs?.sm2 || null;
-    const dueStr = sm2?.due ? new Date(sm2.due).toLocaleDateString("tr-TR") : "—";
-    const efStr = (sm2 && Number.isFinite(sm2.ef)) ? sm2.ef.toFixed(2) : "—";
-    const intStr = (sm2 && Number.isFinite(sm2.interval)) ? `${sm2.interval}g` : "—";
-    const repsStr = (sm2 && Number.isFinite(sm2.reps)) ? String(sm2.reps) : "—";
-    const replayKey = item?._key || "";
+    const time = item.lastTimeSpent || 0;
     
-    let optionsHtml = "";
-    if (q.optionsByLetter) {
-      ["A","B","C","D","E"].forEach(L => {
-        const opt = q.optionsByLetter[L];
-        if (!opt || !opt.text) return;
-
-        let extraClass = "";
-        let icon = "⚪"; // Nötr şık
-
-        // 1. Kullanıcının YANLIŞ seçimi
-        if (item.yourLetter === L) {
-          extraClass = "wrong";
-          icon = "❌"; 
-        }
-        // 2. DOĞRU cevap
-        if (opt.id === item.correctId) {
-          extraClass = "correct";
-          icon = "✅";
-        }
-
-        optionsHtml += `
-          <div class="opt ${extraClass}">
-            <span style="font-size:1.2em">${icon}</span>
-            <span><b style="opacity:0.5; margin-right:6px;">${L})</b> ${opt.text}</span>
-          </div>`;
-      });
+    // 🕒 Zaman Rozeti Mantığı
+    let timeStatus = "Normal";
+    let timeColor = "var(--muted)";
+    let timeEmoji = "⏱️";
+    if (time > 0 && time < 12) { 
+      timeStatus = "Fırtına Hızı"; timeColor = "#fbbf24"; timeEmoji = "⚡"; 
+    } else if (time > 90) { 
+      timeStatus = "Derin Analiz"; timeColor = "#f87171"; timeEmoji = "🐢"; 
     }
 
+    const optionsHtml = ["A", "B", "C", "D", "E"].map(L => {
+      const opt = q.optionsByLetter?.[L];
+      if (!opt || (!opt.text && L !== "A")) return "";
+      const isUserChoice = (opt.id === item.yourId);
+      const isCorrect = (opt.id === item.correctId);
+      let cls = isUserChoice && !isCorrect ? "wrong" : isCorrect ? "correct" : "";
+      let icon = isUserChoice && !isCorrect ? "❌" : isCorrect ? "✅" : "⚪";
+      return `<div class="opt ${cls}"><span>${icon}</span><span><b style="opacity:0.6; margin-right:5px;">${L}:</b> ${opt.text || "..."}</span></div>`;
+    }).join("");
+
     return `
-      <div class="card" data-subject="${subject.replace(/"/g,'&quot;')}">
-        <div class="q-meta">
-          <span>Soru #${idx+1}</span>
-          <span style="color:#ef4444">Hatalı Cevap</span>
+      <div class="card">
+        <div class="q-header-row">
+          <div class="q-subject-pill">📍 ${q.subject || "Genel"}</div>
+          <div class="q-time-pill" style="background:${timeColor}15; color:${timeColor}; border-color:${timeColor}44;">
+             <span>${timeEmoji}</span>
+             <span>${time} sn</span>
+             <span style="opacity:0.6; font-size:8px; margin-left:4px;">• ${timeStatus}</span>
+          </div>
         </div>
-        <div class="q-text">${q.text}</div>
-        <div class="subjLine">📘 Konu: <b>${subject}</b></div>
+        
+        <div class="q-text"><strong>${idx + 1}.</strong> ${q.text}</div>
         <div class="options">${optionsHtml}</div>
-        <div class="actions">
-          <button class="btnReplay" data-replay="${replayKey}">♻️ Bu hatayı tekrar sor</button>
-        </div>
-        <div class="stat-row">
-          <span>📅 ${new Date(item.addedAt).toLocaleDateString()}</span>
-          <span>📉 ${item.wrongCount} kez yanlış yapıldı</span>
-          <span>⏱️ SRS: ${dueStr} • EF ${efStr} • ${intStr} • reps ${repsStr}</span>
-        </div>
-      </div>
-    `;
+        
+        ${q.analysis ? `
+          <div class="ai-analysis">
+            <div style="color:var(--accent); font-size:10px; font-weight:800; margin-bottom:8px;">✨ PATİ'NİN NOTU</div>
+            <div style="font-size:13px; color:#d1d1d6; font-style:italic; line-height:1.5;">${q.analysis.replace(/\n/g, '<br>')}</div>
+          </div>
+        ` : ''}
+      </div>`;
   }).join("");
 
+  // --- 5. GRAFİK SATIRLARI ---
+  const chartRows = Object.entries(subjectMap).sort((a,b)=>b[1]-a[1]).map(([sub, count]) => {
+      const pct = Math.round((count / wrongCount) * 100);
+      return `<div class="chart-row"><div style="display:flex; justify-content:space-between; font-size:11px; color:var(--muted);"><span>${sub}</span><span>%${pct}</span></div><div class="bar-bg"><div class="bar-fill" style="width:${pct}%"></div></div></div>`;
+  }).join("");
+
+  // --- 6. FİNAL BİRLEŞTİRME ---
   const fullHtml = `
     <!DOCTYPE html>
     <html lang="tr">
-    <head>
-      <meta charset="UTF-8">
-      <title>Hata Raporu - ${now}</title>
-      <style>${css}</style>
-    </head>
+    <head><meta charset="UTF-8"><title>Acumen Stratejik Analiz</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <style>${css}</style></head>
     <body>
-      <h1>🚨 Hata Analiz Raporu</h1>
-      <div class="meta">
-        Tarih: ${now} • Toplam Hata: ${onlyWrongs.length} adet<br>
-        <i>Boş bırakılan sorular bu rapora dahil edilmemiştir. Sadece yanlış yapılanlar listelenmektedir.</i>
-      </div>
-      <div class="filters">
-        <div class="filtersTitle">Konu filtresi</div>
-        <div class="chips">
-          <button class="chip chipAll" data-subject="__ALL__">Tümü <span class="chipCount">${onlyWrongs.length}</span></button>
-          ${chipsHtml}
+      <div class="panel left-panel">
+        <div class="header" style="border:none; margin-bottom:10px;"><h1>ACUMEN</h1><p style="color:var(--muted); font-size:11px; font-weight:600; letter-spacing:1px; margin-top:5px;">ANALİZ RAPORU</p></div>
+        <div style="text-align:center;">
+          <div class="pati-badge">${patiIcon}</div>
+          <div style="font-size:18px; font-weight:800; color:#fff; margin-bottom:10px;">${patiTitle}</div>
+          <div style="font-size:13px; color:#d1d1d6; font-style:italic; line-height:1.5; padding: 0 5px;">"${patiMsg}"</div>
+          <div class="divider"></div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+            <div style="background:rgba(255,255,255,0.03); padding:10px; border-radius:12px; border:1px solid var(--border);">
+              <div style="font-size:9px; color:var(--muted); text-transform:uppercase;">Seviye</div>
+              <div style="font-size:14px; font-weight:800; color:var(--accent);">LVL ${patiLevel}</div>
+            </div>
+            <div style="background:rgba(255,255,255,0.03); padding:10px; border-radius:12px; border:1px solid var(--border);">
+              <div style="font-size:9px; color:var(--muted); text-transform:uppercase;">Seri</div>
+              <div style="font-size:14px; font-weight:800; color:#ef4444;">${patiStreak} 🔥</div>
+            </div>
+          </div>
         </div>
-        <div class="filtersHint">İpucu: “♻️ Bu hatayı tekrar sor” butonu, raporu <b>aynı klasörde</b> bir sunucu üzerinden (ör. Live Server) açtıysan çalışır.</div>
       </div>
-      ${itemsHtml}
-
-      <script>
-        (function(){
-          const chips = Array.from(document.querySelectorAll('.chip'));
-          const cards = Array.from(document.querySelectorAll('.card'));
-          const setActive = (btn) => {
-            chips.forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-          };
-          const applyFilter = (subj) => {
-            cards.forEach(c => {
-              const s = c.getAttribute('data-subject') || 'Genel';
-              c.style.display = (subj==='__ALL__' || s===subj) ? '' : 'none';
-            });
-          };
-          chips.forEach(btn => {
-            btn.addEventListener('click', () => {
-              const s = btn.getAttribute('data-subject');
-              setActive(btn);
-              applyFilter(s);
-            });
-          });
-          // default active
-          const all = document.querySelector('.chipAll');
-          if (all){ setActive(all); applyFilter('__ALL__'); }
-
-          document.body.addEventListener('click', (e) => {
-            const b = e.target.closest('.btnReplay');
-            if (!b) return;
-            const key = b.getAttribute('data-replay') || '';
-            if (!key){ alert('Replay anahtarı yok. (Eski kayıt olabilir)'); return; }
-            try {
-              localStorage.setItem('sinav_replay_key', key);
-              // same folder assumption: open the app
-              const url = './index.html#replay=1';
-              window.open(url, '_blank');
-            } catch(err){
-              alert('Replay için localStorage erişimi gerekli. Raporu bir sunucu üzerinden açmayı dene.');
-            }
-          });
-        })();
-      </script>
+      
+      <div class="main-content">
+        <div style="margin-bottom:30px; padding-left:10px; border-left:4px solid var(--accent);">
+          <div style="font-size:13px; color:var(--muted); font-weight:600;">${now}</div>
+          <div style="font-size:18px; font-weight:800; color:#fff;">Toplam ${wrongCount} Hata Analizi</div>
+        </div>
+        ${rows}
+      </div>
+      
+      <div class="panel right-panel">
+        <div class="panel-section-title">📊 KONU DAĞILIMI</div>
+        ${chartRows}
+        <div class="divider"></div>
+        <div class="panel-section-title">🎯 ODAK NOKTALARI</div>
+        ${focusHtml}
+      </div>
     </body>
-    </html>
-  `;
+    </html>`;
 
-  downloadBlob(fullHtml, `hata_raporu_${new Date().toISOString().slice(0,10)}.html`, "text/html");
-  showWarn("📄 Sadece yanlışlardan oluşan hata raporu indirildi.");
+  downloadBlob(fullHtml, `Acumen_Strateji_${now.replace(/\./g,'_')}.html`, "text/html");
+  showToast({ title: "Başarılı", msg: "Yeni tasarım hazır!", kind: "ok" });
 });
 
 // Yanlışları Temizle
@@ -865,19 +890,39 @@ if (fmToggle){
 }
 
 
-document.addEventListener("change", e=>{
-  if (state.mode!=="exam" || e.target.type!=="radio") return;
+document.addEventListener("change", e => {
+  if (state.mode !== "exam" || e.target.type !== "radio") return;
+  
   const q = Number(e.target.name.slice(1));
-    state.answers.set(q, e.target.value);
+  const L = e.target.value; 
+  
+  // ✨ ZAMAN HESAPLAMA (0 Sorununu çözen kısım)
+  const now = Date.now();
+  // Son etkileşimden bu yana geçen süreyi hesapla (saniye)
+  const delta = Math.round((now - (state.lastActionAt || now)) / 1000);
+  const currentTotal = state.questionTimes.get(q) || 0;
+  state.questionTimes.set(q, currentTotal + delta);
+  // Bir sonraki soru/işlem için zamanı güncelle
+  state.lastActionAt = now;
 
-  // Focus mod: cevaplandıktan sonra sıradaki soruyu aktif yap
+  // 1. Veriyi kaydet
+  state.answers.set(q, L);
+
+  // 2. Navigasyonu ZORLA ve ANINDA güncelle
+  if (typeof refreshNavColors === "function") {
+    refreshNavColors(state);
+  }
+
+  // 3. Focus mod mantığı
   if (document.body.classList.contains("focusMode")) {
     const total = state.parsed?.questions?.length || 0;
     const nextQn = Math.min(q + 1, total || q);
     if (total && nextQn !== q) {
       state.activeQn = nextQn;
       state.navPage = Math.floor((nextQn - 1) / 20);
-      scrollToQuestion(nextQn);
+      if (typeof scrollToQuestion === "function") {
+        scrollToQuestion(nextQn);
+      }
     } else {
       state.activeQn = q;
     }
@@ -885,6 +930,15 @@ document.addEventListener("change", e=>{
     state.activeQn = q;
   }
 
+  // 4. Pati ve Gamification sistemini tetikle
+  try { 
+    const firstTime = true; 
+    if (typeof handleGamification === "function") {
+      handleGamification(null, { firstTime }); 
+    }
+  } catch(err) {}
+
+  // 5. Ekranı genel olarak yenile ve kaydet
   paintAll();
   persist();
 });
@@ -1064,24 +1118,44 @@ const uiCancelReport = document.getElementById("btnCancelReport");
 const uiSendReport = document.getElementById("btnSendReport");
 const uiReportText = document.getElementById("reportText");
 
-// 1. Modalı Aç
-if (uiReportBtn) {
-    uiReportBtn.onclick = () => {
-        if(uiReportModal) {
-            uiReportModal.style.display = "flex";
-            uiReportText.value = ""; // Önceki yazıyı temizle
-            uiReportText.focus();
-        }
-    };
+// ---- Report modal helpers (robust + idempotent) ----
+function openReportModal(){
+  if (!uiReportModal) return;
+  uiReportModal.style.display = "flex";
+  if (uiReportText){
+    uiReportText.value = "";
+    // focus next tick to ensure visible
+    setTimeout(() => uiReportText.focus(), 0);
+  }
+}
+function closeReportModal(){
+  if (!uiReportModal) return;
+  uiReportModal.style.display = "none";
 }
 
-// 2. Modalı Kapat (X ve Vazgeç)
-const closeReportModal = () => {
-    if(uiReportModal) uiReportModal.style.display = "none";
-};
+// 1) Modal open (use addEventListener; avoid overwrite + survive re-renders)
+if (uiReportBtn){
+  uiReportBtn.setAttribute("type","button");
+  uiReportBtn.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    openReportModal();
+  });
+} else {
+  console.warn("[report] #btnReportBug bulunamadı (index.html kontrol)");
+}
 
-if(uiCloseReport) uiCloseReport.onclick = closeReportModal;
-if(uiCancelReport) uiCancelReport.onclick = closeReportModal;
+// 2) Close buttons
+if (uiCloseReport) uiCloseReport.addEventListener("click", (e) => { e.preventDefault(); closeReportModal(); });
+if (uiCancelReport) uiCancelReport.addEventListener("click", (e) => { e.preventDefault(); closeReportModal(); });
+
+// 3) Overlay click to close (optional UX)
+if (uiReportModal){
+  uiReportModal.addEventListener("click", (e) => {
+    if (e.target === uiReportModal) closeReportModal();
+  });
+}
+
 
 /* =========================================
    1. TOAST BİLDİRİM FONKSİYONU (Alert Yerine)
@@ -1166,3 +1240,132 @@ if (uiSendReport) {
 window.addEventListener("click", (e) => {
     if (e.target === uiReportModal) closeReportModal();
 });
+
+// ==========================================
+// 🧩 TEMPLATE STUDIO ENTEGRASYONU (STATEFUL / WORKFLOW-SAFE)
+// ==========================================
+
+const btnOpenStudio = document.getElementById('btn-open-studio');
+if (btnOpenStudio) {
+  btnOpenStudio.addEventListener('click', () => {
+    const w = 1200, h = 800;
+    const left = (screen.width - w) / 2;
+    const top = (screen.height - h) / 2;
+    window.open('question-marker.html', 'AcumenStudio', `width=${w},height=${h},top=${top},left=${left}`);
+  });
+}
+
+// Güvenlik: istersen origin whitelist ekle (aynı origin bekleniyor)
+// const ALLOWED_ORIGINS = new Set([window.location.origin]);
+
+function isValidTemplatePayload(examData){
+  if (!examData || typeof examData !== "object") return false;
+  if (!Array.isArray(examData.questions) || examData.questions.length === 0) return false;
+  for (const q of examData.questions){
+    if (!q) return false;
+    if (q.n == null && q.origN == null) return false;
+    if (typeof q.text !== "string") return false;
+    if (!q.optionsByLetter || typeof q.optionsByLetter !== "object") return false;
+  }
+  return true;
+}
+
+window.addEventListener('message', async (event) => {
+  try {
+    // if (!ALLOWED_ORIGINS.has(event.origin)) return;
+
+    if (!event.data || event.data.type !== 'ACUMEN_EXAM_DATA') return;
+
+    const examData = event.data.payload;
+    console.log("📦 Stüdyo Verisi Alındı:", examData);
+
+    if (!isValidTemplatePayload(examData)) {
+      showWarn?.("⚠️ Şablon verisi geçersiz/eksik geldi.");
+      return;
+    }
+
+    // 1) Contract normalize
+    const normalized = {
+      ...examData,
+      title: examData.title || "Şablon Sınavı",
+      meta: { ...(examData.meta || {}), keySource: examData?.meta?.keySource || "template" },
+      questions: examData.questions.map((q, i) => {
+        const n = Number(q.n ?? q.origN ?? (i+1));
+        const subject = __getSubject(q);
+        const optionsByLetter = q.optionsByLetter || {};
+        const letters = ["A","B","C","D","E"];
+        const outOpt = {};
+        for (const L of letters){
+          const t = String(optionsByLetter?.[L]?.text ?? "").trim();
+          outOpt[L] = { id: L, text: t };
+        }
+        return {
+          ...q,
+          n,
+          origN: Number(q.origN ?? n),
+          subject,
+          optionsByLetter: outOpt,
+        };
+      })
+    };
+
+    // 2) Uygulama state’ine yaz
+    state.rawText = "";
+    state.shuffleQ = !!el("shuffleQ")?.checked;
+    state.shuffleO = !!el("shuffleO")?.checked;
+
+    state.parsed = applyShuffle(normalized, { shuffleQ: state.shuffleQ, shuffleO: state.shuffleO });
+    state.mode = "prep";
+    state.answers.clear();
+    state.startedAt = null;
+    state.timeLeftSec = null;
+
+    try { timer.stop(); } catch {}
+    safeStyle("timer", e => e.textContent="--:--");
+
+    // 3) keyCoverage meta
+    {
+      const totalQ = state.parsed?.questions?.length || 0;
+      const keyCount = state.parsed?.keyCount || Object.keys(state.parsed?.answerKey || {}).length;
+      state.parsed.keyCount = keyCount;
+      state.parsed.meta = state.parsed.meta || {};
+      state.parsed.meta.keyCoverage = totalQ ? (keyCount / totalQ) : 0;
+      if (!state.parsed.meta.keySource) state.parsed.meta.keySource = keyCount ? "template" : "none";
+    }
+
+    // 4) UI status + rozet
+    const status = document.getElementById('parseStatus');
+    if (status){ status.textContent = "✅ Şablon Hazır"; status.style.color = "#22c55e"; }
+
+    const badge = document.getElementById('template-active-badge');
+    if (badge){
+      badge.style.display = 'flex';
+      badge.innerHTML = `<span class="material-icons-round" style="font-size:1rem">check_circle</span> ${state.parsed.questions.length} Soru`;
+    }
+
+    // 5) Başlat butonu: normal akıştaki görünümü KORU (CSS class'lar belirler)
+// Sadece disabled durumunu kaldır ve etiketi (istersen) çok hafif güncelle.
+    const btnStart = document.getElementById('btnStart');
+    if (btnStart){
+      btnStart.disabled = false;
+      btnStart.removeAttribute('disabled');
+
+      // Normal akışta buton: '<span class="btn-icon">🚀</span> BAŞLAT'
+      // Aynı görünümü koruyoruz. Template bilgisi zaten rozet + parseStatus'ta.
+      btnStart.innerHTML = '<span class="btn-icon">🚀</span> BAŞLAT';
+    }
+syncGlobals();
+    paintAll();
+    persist();
+
+    showToast?.({ title:"Şablon", msg:`${state.parsed.questions.length} soru yüklendi.`, kind:"ok" });
+
+    const as = el("autoStart");
+    if (as && as.checked) startExam();
+
+  } catch (e){
+    console.error(e);
+    showWarn?.(e?.message || "Şablon entegrasyonu hatası");
+  }
+});
+

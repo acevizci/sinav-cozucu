@@ -13,7 +13,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
   
-<script src="js/auth.js"></script>
+<script type="module" src="js/auth.js"></script>
 
   <link rel="stylesheet" href="./styles.css" />
 </head>
@@ -116,8 +116,8 @@
       
     <div class="input-section">
       <div class="nav-pills">
-        <button class="nav-item active" onclick="switchTab('file')">📂 Dosya Yükle</button>
-        <button class="nav-item" onclick="switchTab('text')">📋 Metin Yapıştır</button>
+        <button class="nav-item active" onclick="switchTab('file', this)">📂 Dosya Yükle</button>
+        <button class="nav-item" onclick="switchTab('text', this)">📋 Metin Yapıştır</button>
       </div>
 
       <div id="tab-file" class="tab-content active">
@@ -135,6 +135,28 @@
       <div id="tab-text" class="tab-content" style="display:none;">
         <textarea id="pasteArea" class="glass-input" placeholder="Soruları buraya yapıştır..."></textarea>
       </div>
+	  
+	 <div class="template-section">
+    <div class="ts-header">
+       
+        <div class="ts-titles">
+            <h4>Şablon Stüdyosu</h4>
+            <small>Karmaşık PDF'ler için</small>
+        </div>
+    </div>
+
+    <div class="ts-actions">
+        <div id="template-active-badge" class="ts-badge active-badge" style="display: none;">
+            <span class="material-icons-round">Alınan Soru</span>
+            <span>Aktif</span>
+        </div>
+
+        <button id="btn-open-studio" class="ts-btn">
+           
+            <span>Oluştur</span>
+        </button>
+    </div>
+</div>
     </div>
 
     <div class="config-section">
@@ -313,60 +335,38 @@
 <script type="module" src="./js/app.js"></script>
 
 <script>
-  function switchTab(tab){
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    event.target.classList.add('active');
-    document.getElementById('tab-file').style.display = (tab === 'file') ? 'block' : 'none';
-    document.getElementById('tab-text').style.display = (tab === 'text') ? 'block' : 'none';
-  }
+  function switchTab(tab, btnEl){
+    // active button
+    document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+    if (btnEl) btnEl.classList.add('active');
 
-  const fileInp = document.getElementById('fileInput');
+    // panels
+    const file = document.getElementById('tab-file');
+    const text = document.getElementById('tab-text');
+    if (file) file.style.display = (tab === 'file') ? 'block' : 'none';
+    if (text) text.style.display = (tab === 'text') ? 'block' : 'none';
+  }const fileInp = document.getElementById('fileInput');
   if(fileInp){
     fileInp.addEventListener('change', function(){
       const name = this.files[0] ? this.files[0].name : '';
       const display = document.getElementById('fileNameDisplay');
-      const label = document.querySelector('.dz-text');
+      const main = document.querySelector('.dz-main-text');
+      const sub = document.querySelector('.dz-sub-text');
       if(name) {
         display.textContent = name;
         display.style.display = 'block';
-        if(label) label.style.display = 'none';
+        if(main) main.style.display = 'none';
+        if(sub) sub.style.display = 'none';
       } else {
         display.style.display = 'none';
-        if(label) label.style.display = 'block';
+        if(main) main.style.display = '';
+        if(sub) sub.style.display = '';
       }
     });
   }
 </script>
 
-  <script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-  // BURADA DEĞİŞİKLİK YAPTIK 👇 (signInWithPopup -> signInWithRedirect)
-  import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-  
-  // 1. ADIMDA KOPYALADIĞIN KODU BURAYA YAPIŞTIR 👇
-  const firebaseConfig = {
-  apiKey: "AIzaSyCy9ThyC6Oojht0lsFyngTFnJOupDngAtQ",
-  authDomain: "acumen-sinav.firebaseapp.com",
-  projectId: "acumen-sinav",
-  storageBucket: "acumen-sinav.firebasestorage.app",
-  messagingSenderId: "888520085772",
-  appId: "1:888520085772:web:d9bc814c06a8b140057929",
-  measurementId: "G-9ZREWM2734"
-};
-
-  // Firebase Başlat
-  const app = initializeApp(firebaseConfig);
-  const auth = getAuth(app);
-  window.auth = auth; // Global erişim için
-  window.googleProvider = new GoogleAuthProvider();
-  window.signInWithPopup = signInWithPopup; 
-  window.signOut = signOut;
-</script>
-
-
-
-
-<div id="summaryModal" class="modalOverlay" style="display:none;" aria-hidden="true">
+  <div id="summaryModal" class="modalOverlay" style="display:none;" aria-hidden="true">
   <div class="modalCard" role="dialog" aria-modal="true">
 
     <div class="modalTop">
@@ -644,5 +644,47 @@
     </div>
 </div>
 <button id="btnReportBug" title="Bir sorun mu var?">🧐</button>
+
+  <script>
+  // ACUMEN_DND_WIRED: drag & drop -> #fileInput
+  (function(){
+    const input = document.getElementById('fileInput');
+    const dz = document.querySelector('.modern-dropzone');
+    const nameEl = document.getElementById('fileNameDisplay');
+
+    if (!input || !dz) return;
+
+    function setName(f){
+      if (!nameEl) return;
+      nameEl.textContent = f ? f.name : "";
+      nameEl.style.display = f ? "block" : "";
+    }
+
+    // prevent browser from opening the file when dropped outside
+    ['dragenter','dragover','dragleave','drop'].forEach(evt=>{
+      window.addEventListener(evt, (e)=>{ e.preventDefault(); e.stopPropagation(); }, false);
+    });
+
+    dz.addEventListener('dragover', ()=> dz.classList.add('drag-over'));
+    dz.addEventListener('dragleave', ()=> dz.classList.remove('drag-over'));
+    dz.addEventListener('drop', (e)=>{
+      dz.classList.remove('drag-over');
+      const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+      if (!f) return;
+
+      const dt = new DataTransfer();
+      dt.items.add(f);
+      input.files = dt.files;
+
+      setName(f);
+      input.dispatchEvent(new Event('change', { bubbles:true }));
+    });
+
+    input.addEventListener('change', ()=>{
+      setName(input.files && input.files[0]);
+    });
+  })();
+  </script>
+
 </body>
 </html>

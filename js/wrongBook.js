@@ -30,6 +30,7 @@ const DAY = 86400000;
 
 function normalizeBlob(q){
   const parts = [
+    normSubject(q.subject),
     q.text || "",
     "A:" + (q.optionsByLetter?.A?.text || ""),
     "B:" + (q.optionsByLetter?.B?.text || ""),
@@ -40,7 +41,7 @@ function normalizeBlob(q){
   return parts.join("||").replace(/\s+/g," ").trim();
 }
 
-function makeKeyFromQuestion(q){
+export function makeKeyFromQuestion(q){
   const blob = normalizeBlob(q);
   // fingerprint: length + double hash (reverse)
   return `${blob.length}:${hashStr(blob)}:${hashStr(blob.split("").reverse().join(""))}`;
@@ -375,28 +376,35 @@ export function exportWrongBook(){
  * - review exam (Tekrar/SRS): correct answers progress via SM-2 quality default=4 (Good)
  *   and store snapshot for this reviewId so user can override rating later.
  */
-export function addToWrongBookFromExam({ parsed, answersMap, reviewId=null }){
+export function addToWrongBookFromExam({ parsed, answersMap, questionTimes = new Map(), reviewId=null }){
   if (!parsed) return;
 
   const book = loadWrongBook();
   const now = nowIso();
   const isReview = /tekrar/i.test(parsed.title || "");
   const rid = reviewId || (parsed.title + "|" + now);
+  const allowBlank = isReview || ((answersMap?.size || 0) > 0);
 
   for (const q of parsed.questions){
     const chosenLetter = answersMap.get(q.n) || null;
     const correctId = parsed.answerKey?.[q.n] || null;
     const chosenId = getChosenOptionId(q, chosenLetter);
 
-    const isBlank = !chosenLetter;
+    // ✨ ZAMAN VERİSİNİ ÇEKELİM
+    const saniye = questionTimes instanceof Map ? (questionTimes.get(q.n) || 0) : (questionTimes?.[q.n] || 0);
+
+    const isBlank = allowBlank && !chosenLetter;
     const hasKey = !!correctId;
     const isWrong = !!(hasKey && chosenId && !setsEqual(toLetterSet(chosenId), toLetterSet(correctId)));
-    const isCorrect = !!(hasKey && chosenId && chosenId === correctId);
+    const isCorrect = !!(
+      hasKey &&
+      chosenId &&
+      setsEqual(toLetterSet(chosenId), toLetterSet(correctId))
+    );
 
     const key = makeKeyFromQuestion(q);
     let rec = book[key];
 
-    // Create record if needed (only when wrong/blank or already exists)
     if (!rec && !(isWrong || isBlank)) continue;
 
     if (!rec){
@@ -414,7 +422,8 @@ export function addToWrongBookFromExam({ parsed, answersMap, reviewId=null }){
         correctId: correctId || null,
         yourLetter: chosenLetter,
         yourId: chosenId || null,
-        status: "YOK"
+        status: "YOK",
+        lastTimeSpent: 0 // Başlangıç değeri
       };
       ensureSrs(rec);
     }
@@ -427,38 +436,33 @@ export function addToWrongBookFromExam({ parsed, answersMap, reviewId=null }){
     rec.correctId = correctId || rec.correctId || null;
     rec.yourLetter = chosenLetter;
     rec.yourId = chosenId || null;
+    
+    // ✨ SÜREYİ KAYDA İŞLE
+    rec.lastTimeSpent = saniye; 
 
-    // If review exam: we want to schedule both correct & wrong answers
     if (isReview){
-      // snapshot once per reviewId so overrides can revert
       ensureSrs(rec);
-      if (rec.srs.lastReviewId !== rid){
+      if (rec.srs.lastReviewId !== rid || !rec.srs._before){
         rec.srs._before = snapshotSm2(rec);
         rec.srs.lastReviewId = rid;
       }
 
       if (!hasKey){
-        // no key => don't schedule
         rec.status = "ANAHTAR_YOK";
       } else if (isCorrect){
         rec.status = "DOGRU";
-        // default: Good (4)
         sm2Apply(rec, 4);
       } else {
-        // wrong or blank => low quality
         rec.status = isBlank ? "BOS" : "YANLIS";
         if (isBlank) rec.blankCount = (rec.blankCount||0) + 1;
         if (isWrong) rec.wrongCount = (rec.wrongCount||0) + 1;
         sm2Apply(rec, 1);
       }
-
       book[key] = rec;
       continue;
     }
 
-    // Normal exams: only track wrong/blank and reset schedule
     if (!(isWrong || isBlank)) {
-      // correct in normal exam does not change schedule
       book[key] = rec;
       continue;
     }
@@ -467,22 +471,15 @@ export function addToWrongBookFromExam({ parsed, answersMap, reviewId=null }){
     if (isBlank) rec.blankCount = (rec.blankCount || 0) + 1;
     if (isWrong) rec.wrongCount = (rec.wrongCount || 0) + 1;
 
-    // reset-like behaviour: quality=1
     sm2Apply(rec, 1);
-
     book[key] = rec;
   }
 
-  // prune if over limit: drop oldest lastSeen
+  // Pruning logic remains same...
   const keys = Object.keys(book);
-  if (keys.length > MAX_ITEMS){
-    keys.sort((a,b) => {
-      const ta = Date.parse(book[a].lastSeenAt || book[a].addedAt || 0);
-      const tb = Date.parse(book[b].lastSeenAt || book[b].addedAt || 0);
-      return ta - tb;
-    });
-    const drop = keys.slice(0, keys.length - MAX_ITEMS);
-    for (const k of drop) delete book[k];
+  if (keys.length > 300){ // Örn: MAX_ITEMS
+    keys.sort((a,b) => Date.parse(book[a].lastSeenAt) - Date.parse(book[b].lastSeenAt));
+    keys.slice(0, keys.length - 300).forEach(k => delete book[k]);
   }
 
   saveWrongBook(book);
@@ -587,7 +584,7 @@ export function buildWrongOnlyParsed({ limit=60, onlyDue=false, fallbackAll=true
 
   const questions = items.map((it, idx) => ({
     n: idx + 1,
-    origN: idx + 1,
+    origN: (it.q?.origN ?? it.q?.n ?? idx + 1),
     text: it.q?.text || "",
     subject: normSubject(it.q?.subject),
     optionsByLetter: it.q?.optionsByLetter || {}

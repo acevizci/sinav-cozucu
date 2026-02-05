@@ -618,14 +618,19 @@ body.focusMode .layoutExam{
 
 /* Toasts */
 .toastHost{ position: fixed; bottom: 20px; right: 20px; z-index: 40000; display:flex; flex-direction:column; gap:10px;}
-.toast{
-  background: rgba(25,25,30,0.95);
-  border-left: 4px solid var(--accent);
-  padding: 12px 16px;
-  border-radius: 8px;
-  width: 320px;
-  box-shadow: 0 10px 40px rgba(0,0,0,.5);
-  color: #fff;
+/* Bildirimlerin giriş animasyonunu da sağdan gelecek şekilde güncelleyelim */
+.toast {
+    background: rgba(28, 28, 30, 0.8) !important;
+    backdrop-filter: blur(12px) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    padding: 12px 20px;
+    border-radius: 14px;
+    color: white;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+    /* Sağdan kayarak gelme efekti */
+    animation: toastSlideIn 0.3s ease-out;
+    min-width: 200px;
+    max-width: 300px;
 }
 .toast.ok{ border-color: var(--ok); }
 .toast.bad{ border-color: var(--bad); }
@@ -1036,18 +1041,18 @@ button.warn:hover {
 /* 🌓 TEMA YÖNETİMİ & RENK AYARLARI (CLEAN VERSION)             */
 /* ============================================================ */
 
-/* 1. TEMEL DEĞİŞKENLER (KOYU MOD - VARSAYILAN) */
-:root {
-  --bg-main: #000000;
-  --bg-panel: #1c1c1e;
-  --text-main: #ffffff;
-  --text-muted: #8e8e93;
-  --border-color: #2c2c2e;
-  --accent-color: #a855f7;
+/* 1. TEMEL DEĞİŞKENLER (ALIAS - UNIFIED THEME) */
+:root{
+  /* Backward-compatible aliases for older selectors */
+  --bg-main: var(--bg0);
+  --bg-panel: rgba(255,255,255,.06);
+  --text-main: var(--text);
+  --text-muted: var(--muted);
+  --border-color: var(--stroke);
+  --accent-color: var(--accent);
   --opt-bg: rgba(255,255,255,0.05);
-  --opt-hover: rgba(255,255,255,0.1);
+  --opt-hover: rgba(255,255,255,0.10);
 }
-
 /* 2. MOD TANIMLARI (DEĞİŞKENLER) */
 
 /* ☀️ AYDINLIK MOD */
@@ -1078,10 +1083,13 @@ body.sepia-mode {
 
 /* Ana Gövde */
 body {
-  background-color: var(--bg-main) !important;
-  color: var(--text-main) !important;
+  background: radial-gradient(1200px 800px at 10% 10%, rgba(34,197,94,.10), transparent 60%),
+              radial-gradient(900px 600px at 90% 20%, rgba(6,182,212,.10), transparent 55%),
+              linear-gradient(180deg, var(--bg0), var(--bg1));
+  color: var(--text);
   transition: background 0.3s, color 0.3s;
 }
+
 
 /* Metin Okunabilirliği (Light/Sepia için zorunlu) */
 body.light-mode h1, body.sepia-mode h1,
@@ -3807,14 +3815,16 @@ body.sepia-mode .btn-ghost:hover {
 /* Bildirimlerin Duracağı Alan */
 #toastHost {
     position: fixed;
-    top: 20px;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 999999; /* En üstte */
+    /* Sol üstten alıp sağ alta taşıyoruz */
+    bottom: 100px; /* Pati'nin biraz üzerinde olması için */
+    right: 20px;
+    z-index: 10000;
     display: flex;
     flex-direction: column;
     gap: 10px;
-    pointer-events: none; /* Arkadaki butonlara tıklanabilsin */
+    /* Bildirimlerin sağa yaslı durması için */
+    align-items: flex-end;
+    pointer-events: none;
 }
 
 /* Tekil Bildirim Kartı */
@@ -3837,8 +3847,14 @@ body.sepia-mode .btn-ghost:hover {
 }
 
 @keyframes toastSlideIn {
-    from { transform: translateY(-20px); opacity: 0; }
-    to { transform: translateY(0); opacity: 1; }
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
 }
 
 /* Çıkış Animasyonu (JS ile eklenecek) */
@@ -3894,4 +3910,221 @@ body.sepia-mode .toast-msg.success { border-left: 4px solid #22c55e; }
     /* Butonun z-index'i 99999 idi. 
        Giriş ekranını 100000 yaparak onun üstüne çıkarıyoruz. */
     z-index: 100000 !important; 
+}
+
+/* Şablon Stüdyosu Ana Kartı */
+.template-section {
+    margin-top: 15px;
+    padding: 12px 15px;
+    background: rgba(6, 182, 212, 0.05); /* Çok hafif cyan arka plan */
+    border: 1px dashed rgba(6, 182, 212, 0.4);
+    border-radius: 10px;
+    display: flex;
+    flex-wrap: wrap; /* Dar alanda alt satıra geçmesine izin ver */
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    transition: all 0.3s ease;
+}
+
+.template-section:hover {
+    background: rgba(6, 182, 212, 0.08);
+    border-color: rgba(6, 182, 212, 0.8);
+}
+
+/* Başlık ve İkon Grubu */
+.ts-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 1; /* Mümkün olan boşluğu kapla */
+    min-width: 140px; /* Çok küçülmesini engelle */
+}
+
+.ts-icon-box .material-icons-round {
+    color: #06b6d4;
+    font-size: 24px;
+    background: rgba(6, 182, 212, 0.1);
+    padding: 8px;
+    border-radius: 8px;
+}
+
+.ts-titles h4 {
+    margin: 0;
+    font-size: 0.95rem;
+    color: #e2e8f0;
+    font-weight: 600;
+}
+
+.ts-titles small {
+    display: block;
+    font-size: 0.75rem;
+    color: #94a3b8;
+    line-height: 1.2;
+}
+
+/* Buton ve Rozet Grubu */
+.ts-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Oluştur Butonu */
+.ts-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    background: #0f172a;
+    border: 1px solid #06b6d4;
+    color: #06b6d4;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap; /* Yazının alt satıra düşmesini engelle */
+}
+
+.ts-btn:hover {
+    background: #06b6d4;
+    color: #0f172a;
+    box-shadow: 0 0 10px rgba(6, 182, 212, 0.3);
+}
+
+.ts-btn .material-icons-round {
+    font-size: 16px;
+}
+
+/* Aktif Rozeti */
+.ts-badge.active-badge {
+    display: flex; /* Flex ile ikon ve yazıyı ortala */
+    align-items: center;
+    gap: 4px;
+    background: #22c55e; /* Yeşil */
+    color: #000;
+    padding: 4px 8px;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    white-space: nowrap;
+    animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.ts-badge .material-icons-round {
+    font-size: 14px;
+}
+
+/* Animasyon: Rozet açılırken hoş bir efekt */
+@keyframes popIn {
+    0% { transform: scale(0.5); opacity: 0; }
+    100% { transform: scale(1); opacity: 1; }
+}
+
+
+
+/* =============================
+   UX FALLBACKS (PDF visual options)
+   ============================= */
+.opt-missing-chip{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  padding:2px 8px;
+  border-radius:999px;
+  font-size:0.78rem;
+  line-height:1.2;
+  color: rgba(255,255,255,.82);
+  background: rgba(255,255,255,.08);
+  border: 1px solid rgba(255,255,255,.14);
+}
+
+.modern-dropzone.drag-over .dz-content,
+.modern-dropzone.drag-over{
+  outline: 2px dashed rgba(34,197,94,.65);
+  outline-offset: 10px;
+  box-shadow: 0 0 0 6px rgba(34,197,94,.10);
+}
+
+
+/* ============================================================
+   SADECE AÇIK (LIGHT) VE KİTAP (BOOK) MODU DÜZELTMELERİ
+   (Koyu temaya dokunmaz)
+   ============================================================ */
+
+/* 1. KART GÖVDESİ (Sadece Light ve Book modunda değişir) */
+body.light-mode .template-section,
+body.book-theme .template-section {
+    /* Arka plan: Beyazdan çok açık maviye geçiş */
+    background: linear-gradient(135deg, #ffffff 40%, #ecfeff 100%) !important;
+    
+    /* Çerçeve ve Gölge */
+    border: 1px solid rgba(8, 145, 178, 0.25) !important;
+    box-shadow: 0 4px 15px rgba(8, 145, 178, 0.08) !important;
+}
+
+/* 2. BAŞLIK VE YAZILAR (Sadece Light ve Book modunda koyu renk olur) */
+body.light-mode .ts-titles h4,
+body.book-theme .ts-titles h4 {
+    color: #0f172a !important; /* Koyu Lacivert/Siyah */
+    font-weight: 700 !important;
+    text-shadow: none !important;
+}
+
+body.light-mode .ts-titles small,
+body.book-theme .ts-titles small {
+    color: #475569 !important; /* Okunaklı Gri */
+    font-weight: 600 !important;
+}
+
+/* 3. OLUŞTUR BUTONU (Sadece Light ve Book modunda beyaz/cyan olur) */
+body.light-mode .ts-btn,
+body.book-theme .ts-btn {
+    background-color: #ffffff !important;  /* Zemin BEYAZ */
+    color: #0891b2 !important;             /* Yazı CYAN */
+    border: 1px solid #0891b2 !important;  /* Çerçeve CYAN */
+    box-shadow: 0 2px 5px rgba(0,0,0,0.05) !important;
+}
+
+/* Buton Hover (Sadece Light ve Book modunda) */
+body.light-mode .ts-btn:hover,
+body.book-theme .ts-btn:hover {
+    background-color: #0891b2 !important;  /* Zemin CYAN */
+    color: #ffffff !important;             /* Yazı BEYAZ */
+    box-shadow: 0 4px 10px rgba(8, 145, 178, 0.3) !important;
+}
+
+/* 4. İKON KUTUSU (İkon arka planını uyumlu hale getir) */
+body.light-mode .ts-icon-box .material-icons-round,
+body.book-theme .ts-icon-box .material-icons-round {
+    background: rgba(8, 145, 178, 0.1) !important;
+    color: #0e7490 !important;
+}
+
+.navBtn.answered {
+    /* Yarı şeffaf mor arka plan */
+    background: rgba(168, 85, 247, 0.25) !important; 
+    
+    /* Arka planı bulandırma (Cam efektinin sırrı) */
+    backdrop-filter: blur(8px) !important;
+    -webkit-backdrop-filter: blur(8px) !important;
+
+    /* İnce, ışığı yansıtan kenarlık */
+    border: 1px solid rgba(168, 85, 247, 0.4) !important;
+    
+    /* Parlak yazı rengi ve hafif gölge */
+    color: #f5f3ff !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1), inset 0 0 0 1px rgba(255, 255, 255, 0.1) !important;
+    
+    opacity: 1 !important;
+}
+
+/* Aktif soruya tıklandığında cam efektini daha belirgin yapalım */
+.navBtn.active {
+    background: rgba(168, 85, 247, 0.4) !important;
+    border: 1px solid rgba(168, 85, 247, 0.8) !important;
+    box-shadow: 0 0 15px rgba(168, 85, 247, 0.5) !important;
+    transform: scale(1.05);
 }
