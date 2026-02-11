@@ -433,11 +433,11 @@ export function getPatiLevel(){
 }
 function _getLevelXp(){
   const raw = localStorage.getItem(PATI_LEVEL_XP_KEY);
-  const n = parseInt(raw || "0", 10);
+  const n = parseFloat(raw || "0");
   return Number.isFinite(n) && n >= 0 ? n : 0;
 }
 function _setLevelXp(n){
-  localStorage.setItem(PATI_LEVEL_XP_KEY, String(Math.max(0, n|0)));
+  localStorage.setItem(PATI_LEVEL_XP_KEY, String(Math.max(0, Number(n)||0)));
 }
 function getLastFedTs(){
   const raw = localStorage.getItem(PATI_LAST_FED_TS_KEY);
@@ -459,13 +459,13 @@ function _levelUp(){
   const current = getPatiLevel();
   const next = current + 1;
   localStorage.setItem(PATI_LEVEL_KEY, String(next));
-  console.log("🐶 Pati level up:", current, "→", next);
+  //console.log("🐶 Pati level up:", current, "→", next);
   return next;
 }
-function onCorrectFirstTimeLevelProgress(turn){
+function onCorrectFirstTimeLevelProgress(delta=1){
   const stride = getLevelUpStride();
   let xp = _getLevelXp();
-  xp++;
+  xp += Math.max(0, Math.min(1, Number(delta)||0));
   if (xp >= stride) {
     xp = 0;
     const newLv = _levelUp();
@@ -688,6 +688,55 @@ window.PatiManager = {
     }
   },
 
+// ... checkMood fonksiyonundan sonra buraya ekle ...
+
+  // =======================
+  // CANLI PATİ MOTORU (RASTGELE DAVRANIŞLAR)
+  // =======================
+  startLiving: function() {
+    const avatar = document.getElementById('patiAvatar');
+    if (!avatar) return;
+
+    // Rastgele hareket döngüsü
+    const triggerRandomAction = () => {
+      // Eğer yemek yiyorsa veya üzgünse rastgele hareket yapma (atmosferi bozmasın)
+      if (avatar.classList.contains('eating') || avatar.classList.contains('sad')) {
+        setTimeout(triggerRandomAction, 5000);
+        return;
+      }
+
+      // Olası hareketler listesine 'action-spin' eklendi!
+      const actions = [
+          'action-tilt', 
+          'action-sniff', 
+          'action-jump', 
+          'action-spin', // 🌪️ YENİ: Kendi etrafında dönme
+          'none', 'none', 'none' // 'none' sayısı ile hiperaktiviteyi dengeliyoruz
+      ];
+      
+	  
+      const action = actions[Math.floor(Math.random() * actions.length)];
+
+      if (action !== 'none') {
+        avatar.classList.add(action);
+        
+        // Animasyon bitince class'ı temizle (ki tekrar çalışabilsin)
+        setTimeout(() => {
+          avatar.classList.remove(action);
+        }, 1200); // En uzun animasyondan biraz fazla süre
+      }
+
+      // Bir sonraki hareket için rastgele süre (3 ile 7 saniye arası)
+      const nextTime = 3000 + Math.random() * 4000;
+      setTimeout(triggerRandomAction, nextTime);
+    };
+
+    // İlk tetikleme
+    triggerRandomAction();
+  },
+
+  // ... (diğer fonksiyonlar devam eder)
+  
   updateUI: function() {
     const elFood = document.getElementById('patiFoodCount');
     if(elFood) elFood.textContent = this.foodStock;
@@ -744,8 +793,8 @@ let wrongStreak = 0;
 
 // Son cevap geçmişi (spam click / adaptif davranış için)
 const _recentAnswers = []; // [{ts, isCorrect, durationSec}]
-function _pushRecent(isCorrect, durationSec){
-  _recentAnswers.push({ ts: Date.now(), isCorrect, durationSec });
+function _pushRecent(score, durationSec){
+  _recentAnswers.push({ ts: Date.now(), score, durationSec });
   if (_recentAnswers.length > 20) _recentAnswers.shift();
 }
 function _lastN(n){
@@ -912,6 +961,12 @@ export async function handleGamification(isCorrect, { firstTime = false } = {}) 
   // ✅ Yeni tur başlat (bu çağrı = 1 tur)
   PatiSpeech.beginTurn(now);
 
+  // ✅ isCorrect: boolean | null OR score number (0..1)
+  const score = (typeof isCorrect === "number" && Number.isFinite(isCorrect))
+    ? Math.max(0, Math.min(1, isCorrect))
+    : (isCorrect === true ? 1 : (isCorrect === false ? 0 : null));
+
+
   // Ölçüm: cevap verme süresi (onQuestionStart'ı çağırmadan ÖNCE!)
   // ✅ Süre ölçümü: önce 'soru ekrana geldi' ts, yoksa eski fallback
   const pm = window.PatiManager;
@@ -937,7 +992,7 @@ export async function handleGamification(isCorrect, { firstTime = false } = {}) 
 
     const avatar = document.getElementById('patiAvatar');
     if (avatar) {
-      avatar.classList.add('shake-screen');
+      //avatar.classList.add('shake-screen');
       setTimeout(() => avatar.classList.remove('shake-screen'), 400);
     }
   }
@@ -948,11 +1003,11 @@ export async function handleGamification(isCorrect, { firstTime = false } = {}) 
   // 3) BAŞARI / HATA AKIŞI (firstTime)
   if (firstTime === true) {
     // geçmişe yaz (spam click tespiti için)
-    _pushRecent(isCorrect, durationSec);
+    _pushRecent(score, durationSec);
     // ✅ Aynı soruya ikinci kez submit olursa süreyi yeniden ölçmesin
     if (pm && pm._questionShownTs) pm._questionShownTs = 0;
 
-    if (isCorrect === true) {
+    if (score === 1) {
       wrongStreak = 0;
 
       const c = _loadDailyCorrect() + 1;
@@ -1014,7 +1069,27 @@ export async function handleGamification(isCorrect, { firstTime = false } = {}) 
         });
       }
 
-    } else if (isCorrect === false) {
+    } else if (score !== null && score > 0) {
+      // ✅ Kısmi doğru: puan var ama tam değil (yanlış doğruyu götürmez modeli)
+      wrongStreak = 0;
+
+      // günlük solved zaten sayıldı; dailyCorrect / mama ödülü sadece tam doğruya
+      // Level XP: kısmi doğru oranında ilerle
+      onCorrectFirstTimeLevelProgress(score);
+
+      // küçük combo hissi (abartmadan)
+      currentCombo = Math.max(1, currentCombo + 1);
+      correctStreak = Math.max(1, correctStreak + 1);
+
+      await speakEvent("tebrik", {
+        duration: 2600,
+        priority: 22,
+        aiContext: "tebrik",
+        aiChance: 0.35,
+        contextExtra: { partial: Math.round(score*100) }
+      });
+
+} else if (score === 0) {
       wrongStreak++;
       correctStreak = 0;
       currentCombo = 0;
@@ -1024,7 +1099,7 @@ export async function handleGamification(isCorrect, { firstTime = false } = {}) 
 
       const layout = document.getElementById('layoutExam');
       if (layout) {
-        layout.classList.add('shake-screen');
+        //layout.classList.add('shake-screen');
         setTimeout(() => layout.classList.remove('shake-screen'), 400);
       }
 
@@ -1055,7 +1130,7 @@ export async function handleGamification(isCorrect, { firstTime = false } = {}) 
 
     // 4) SPAM CLICK / SALLAMA tespiti (son 3'te 2 hızlı yanlış)
     const last3 = _lastN(3);
-    const fastWrong = last3.filter(x => x.isCorrect === false && x.durationSec > 0 && x.durationSec < 6).length;
+    const fastWrong = last3.filter(x => (Number(x.score)||0) === 0 && x.durationSec > 0 && x.durationSec < 6).length;
     if (fastWrong >= 2) {
       await speakEvent("rastgele_isaretleme", {
         duration: 3800,

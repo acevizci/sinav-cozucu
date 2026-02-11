@@ -1083,5 +1083,53 @@
   updateQuestionList();
 </script>
 
+
+<script>
+/* === ACUMEN_DRIVE_AUTO (v16) ===
+   If opened with ?from=drive&fileId=..., tries to download PDF from Drive using cached OAuth token.
+*/
+(function(){
+  const params = new URLSearchParams(location.search);
+  const fileId = params.get("fileId");
+  if (!fileId) return;
+
+  async function downloadPdfFromDrive(fileId){
+    const token = localStorage.getItem("acumen_google_access_token");
+    if (!token) throw new Error("Drive token yok. Ana uygulamada Drive Listele ile izin verip tekrar dene.");
+    const url = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`;
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    if (!res.ok){
+      const txt = await res.text().catch(()=> "");
+      throw new Error(`Drive PDF indirilemedi (${res.status}): ${txt || res.statusText}`);
+    }
+    const blob = await res.blob();
+    return new File([blob], (params.get("name") || "drive.pdf"), { type: "application/pdf" });
+  }
+
+  async function injectIntoFileInput(file){
+    const inp = document.getElementById("fileInp");
+    if (!inp) throw new Error("Studio file input bulunamadı (fileInp).");
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    inp.files = dt.files;
+    inp.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  // Start after DOM ready
+  window.addEventListener("load", async () => {
+    try {
+      const file = await downloadPdfFromDrive(fileId);
+      await injectIntoFileInput(file);
+      console.log("Drive PDF otomatik yüklendi:", file.name);
+    } catch (e){
+      console.error(e);
+      const el = document.getElementById("status") || document.querySelector(".status") || null;
+      if (el) el.textContent = e.message || String(e);
+      alert(e.message || String(e));
+    }
+  });
+})();
+</script>
+
 </body>
 </html>

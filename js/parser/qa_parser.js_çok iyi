@@ -1,0 +1,206 @@
+// layered_qa_parser.js
+// V5.2 - Türkçe Karakter Desteği, Tekrar Temizleme ve Sıkı Sinyal Kontrolü
+
+import { cleanLine, SOLUTION_ANY_RE } from "./text_pipeline.js";
+
+const LETTERS = ["A", "B", "C", "D", "E"];
+
+// Çözüm satırlarını tespit et
+function isSolutionLine(line) {
+  const l = cleanLine(line);
+  // "Çözüm", "Cevap", "Yanıt" veya sadece "Çözüm:" gibi satırlar
+  return !!l && (SOLUTION_ANY_RE.test(l) || /^(Çözüm|Cevap|Yanıt)\s*[:\.]?$/i.test(l));
+}
+
+// Soru numarasını al (1. , 204. vb)
+function extractQNumber(firstLine) {
+  const a = cleanLine(firstLine);
+  const m = a.match(/^(\d+)\s*[\.\)\-]\s+(.+)$/);
+  if (m) return { n: Number(m[1]), seed: cleanLine(m[2]) };
+  
+  const m2 = a.match(/^(\d+)\s*[\.\)\-]?$/);
+  if (m2) return { n: Number(m2[1]), seed: "" };
+
+  return { n: null, seed: a };
+}
+
+// Bloğu Çözüm satırından ikiye böl
+function splitBeforeAfterSolution(block) {
+  const idx = block.findIndex((l) => isSolutionLine(l));
+  if (idx === -1) return { before: block.slice(), after: [] };
+  return { before: block.slice(0, idx), after: block.slice(idx) };
+}
+
+// Çözüm kısmından cevabı çek (A, B, C...)
+function extractAnswerFromSolutionLines(lines) {
+  if (!lines?.length) return null;
+  const text = lines.map(cleanLine).join(" ");
+  
+  // "Çözüm: A", "Cevap: B" veya "Yanıt A, B"
+  const m = text.match(/(?:Çözüm|Cevap|Yanıt)\s*:?\s*([A-E].*?)$/i);
+  if (m) {
+      const content = m[1];
+      const letters = content.match(/\b[A-E]\b/g);
+      if (letters) return [...new Set(letters)].join("");
+  }
+  return null;
+}
+
+/**
+ * YENİ: Arka arkaya gelen mükerrer satırları temizle
+ * (Örn: "Ürün vizyonu" iki kere geldiyse birini sil)
+ */
+function removeConsecutiveDuplicates(lines) {
+  return lines.filter((line, index) => {
+    if (index === 0) return true;
+    return cleanLine(line) !== cleanLine(lines[index - 1]);
+  });
+}
+
+/**
+ * KRİTİK FONKSİYON: Şıkları Metinden Ayır
+ * Harfsiz şıklar için "Soru Sonu Sinyali" ve "Soru İşareti Yasağı" kullanır.
+ */
+function separateStemAndOptions(lines) {
+  // 1. Önce mükerrer satırları temizle
+  let cleanLines = lines.map(cleanLine).filter(Boolean);
+  cleanLines = removeConsecutiveDuplicates(cleanLines);
+  
+  if (cleanLines.length < 3) {
+      // Çok az satır var, ayrım yapılamaz. Hepsi metin varsay.
+      return { stemLines: cleanLines, optionLines: [] };
+  }
+
+  let splitIndex = -1;
+
+  // YÖNTEM 1: Güçlü Sinyaller (Strong Signals)
+  // Sondan başa doğru git, soru bitiş emarelerini ara.
+  for (let i = cleanLines.length - 1; i >= 0; i--) {
+      const l = cleanLines[i];
+      
+      // Sinyaller: Soru işareti, parantez içi seçim, soru kökü fiilleri
+      // DİKKAT: Sadece satır sonundaysa kabul et
+      if (l.endsWith("?") || l.endsWith(":")) {
+          splitIndex = i;
+          break;
+      }
+      if (/\((.*?seçin|.*?seçiniz)\)/i.test(l)) {
+          splitIndex = i;
+          break;
+      }
+      if (/(hangisidir|değildir|yapmalıdır|gerekir|izlenmelidir)[\.\?]?$/i.test(l)) {
+          splitIndex = i;
+          break;
+      }
+  }
+
+  // Eğer sinyal bulunduysa ve aşağıda mantıklı sayıda (1-8 arası) satır kaldıysa böl
+  if (splitIndex !== -1) {
+      const potentialOptionsCount = cleanLines.length - 1 - splitIndex;
+      if (potentialOptionsCount >= 2 && potentialOptionsCount <= 8) {
+          return {
+              stemLines: cleanLines.slice(0, splitIndex + 1),
+              optionLines: cleanLines.slice(splitIndex + 1)
+          };
+      }
+  }
+
+  // YÖNTEM 2: İstatistiksel Yaklaşım (Fallback)
+  const last5 = cleanLines.slice(-5);
+  const last4 = cleanLines.slice(-4);
+  
+  const isShort = (arr) => arr.every(s => s.length < 200);
+  const variance = (arr) => {
+      const lens = arr.map(s => s.length);
+      const avg = lens.reduce((a,b)=>a+b,0)/lens.length;
+      return lens.reduce((a,b)=>a+Math.abs(b-avg),0)/lens.length;
+  };
+
+  // YENİ KURAL: Eğer bir satır '?' ile bitiyorsa o satır ŞIK OLAMAZ.
+  // Bu, 4 şıklı sorunun 5 şık olmasını engeller.
+  const hasQuestionMark = (arr) => arr.some(l => l.trim().endsWith("?"));
+
+  let takeCount = 0;
+
+  if (cleanLines.length >= 6) { 
+      // 5 Şıkkı dene: Eğer içinde soru işareti yoksa ve kısaysa
+      if (!hasQuestionMark(last5) && isShort(last5) && variance(last5) < 50) {
+          takeCount = 5;
+      } 
+      // 4 Şıkkı dene: Eğer içinde soru işareti yoksa
+      else if (!hasQuestionMark(last4) && isShort(last4) && variance(last4) < 50) {
+          takeCount = 4;
+      }
+  } else if (cleanLines.length === 5) {
+      // 5 satır varsa: Muhtemelen 1 soru + 4 şıktır.
+      if (!hasQuestionMark(last4)) takeCount = 4;
+  } else if (cleanLines.length === 6) {
+      // 6 satır varsa: 1 soru + 5 şık olabilir.
+      if (!hasQuestionMark(last5)) takeCount = 5;
+      else if (!hasQuestionMark(last4)) takeCount = 4;
+  }
+
+  if (takeCount > 0) {
+      const cut = cleanLines.length - takeCount;
+      return {
+          stemLines: cleanLines.slice(0, cut),
+          optionLines: cleanLines.slice(cut)
+      };
+  }
+
+  return { stemLines: cleanLines, optionLines: [] };
+}
+
+export function parseBlockToQuestion(block) {
+  const { before, after } = splitBeforeAfterSolution(block);
+  
+  // Çözüm satırını temizle
+  const rawLines = before
+    .map(cleanLine)
+    .filter(Boolean)
+    .filter(l => !isSolutionLine(l));
+
+  if (rawLines.length === 0) return null;
+
+  // 1. Soru Numarasını Çek
+  const { n, seed } = extractQNumber(rawLines[0]);
+  
+  // Temiz bir liste oluştur: Numarasız ham satırlar
+  let contentLines = [];
+  if (rawLines[0].match(/^\d+[\.\)\-]\s*$/)) {
+      contentLines = rawLines.slice(1);
+  } else {
+      contentLines = [rawLines[0].replace(/^\d+[\.\)\-]\s*/, ""), ...rawLines.slice(1)];
+  }
+
+  // 2. Metin ve Şıkları Ayır
+  const { stemLines, optionLines } = separateStemAndOptions(contentLines);
+
+  // 3. Şıkları Map'e Çevir
+  const finalOptions = {};
+  optionLines.forEach((txt, i) => {
+      // Sadece A,B,C,D,E (ilk 5 şıkkı) al
+      if (i < 5) {
+          finalOptions[LETTERS[i]] = { id: LETTERS[i], text: txt };
+      }
+  });
+
+  // 4. Soru Metnini Birleştir
+  let stemText = stemLines.join(" ").trim();
+  if (!stemText && seed) stemText = seed;
+
+  // 5. Cevap ve Seçim Sayısı
+  const answer = extractAnswerFromSolutionLines(after);
+  let selectCount = 1;
+  if (stemText.includes("3'ü seçin") || stemText.includes("üç temel faktör")) selectCount = 3;
+  if (answer && answer.length > 1) selectCount = answer.length;
+
+  return {
+    n: n || 0,
+    text: stemText || "Soru metni bulunamadı",
+    subject: "Genel",
+    selectCount: selectCount,
+    optionsByLetter: finalOptions,
+    _answerFromSolution: answer
+  };
+}

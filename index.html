@@ -16,6 +16,7 @@
 <script type="module" src="js/auth.js"></script>
 
   <link rel="stylesheet" href="./styles.css" />
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 
 <body>
@@ -57,8 +58,10 @@
 <header class="glass-header">
   <div class="header-content">
     
-    <div class="brand-area">
-      <div class="logo-circle">🧠</div>
+    <div class="brand-area" id="brandLogo" style="cursor: pointer;" title="Yenilemek için tıkla">
+      <div class="logo-circle modern-icon">
+  <span class="spark">✦</span>
+</div>
       <div class="title-group">
         <div style="display:flex; align-items:center; gap:8px;">
             <h1>ACUMEN</h1>
@@ -81,17 +84,23 @@
 
 <div class="header-right">
     
-    <div class="user-chip">
-        <span class="user-avatar">🧑‍🎓</span>
-        <span id="headerUserName" class="user-name">Öğrenci</span>
+    <div class="user-menu-wrapper">
+        <div class="user-chip" id="userMenuTrigger" onclick="toggleUserMenu()">
+            <span class="user-avatar">🧑‍🎓</span>
+            <span id="headerUserName" class="user-name">Öğrenci</span>
+            <span class="dropdown-arrow">▼</span>
+        </div>
+
+        <div id="userDropdown" class="glass-dropdown">
+            <div class="dropdown-item" id="btnLogout">
+                <span class="item-icon">🚪</span>
+               
+            </div>
+        </div>
     </div>
 
     <button id="btnThemeToggle" class="theme-btn-icon" title="Temayı Değiştir">
         🌙
-    </button>
-
-    <button id="btnLogout" class="btn-logout-header" title="Çıkış Yap">
-        <span style="font-size:14px;">🚪</span>
     </button>
 </div>
 
@@ -118,6 +127,7 @@
       <div class="nav-pills">
         <button class="nav-item active" onclick="switchTab('file', this)">📂 Dosya Yükle</button>
         <button class="nav-item" onclick="switchTab('text', this)">📋 Metin Yapıştır</button>
+        <button class="nav-item" onclick="switchTab('drive', this)">☁️ Drive</button>
       </div>
 
       <div id="tab-file" class="tab-content active">
@@ -134,7 +144,47 @@
 
       <div id="tab-text" class="tab-content" style="display:none;">
         <textarea id="pasteArea" class="glass-input" placeholder="Soruları buraya yapıştır..."></textarea>
+		
+		
       </div>
+	  
+<div id="tab-drive" class="tab-content driveX" style="display:none;">
+  <div class="driveX-card">
+    <div class="driveX-top">
+      <div class="driveX-title">
+        <span class="driveX-ico">☁️</span>
+        <div>
+          <div class="driveX-h1">Drive</div>
+          <div id="driveStatus" class="driveX-sub">Hazır</div>
+        </div>
+      </div>
+
+      <button id="btnDriveList" class="driveX-cta">Listele</button>
+    </div>
+
+    <div class="driveX-seg" role="tablist" aria-label="Drive source">
+      <button id="btnModeMy" class="driveX-pill is-active" type="button">Drive’im</button>
+      <button id="btnModeFolder" class="driveX-pill" type="button">Klasör</button>
+    </div>
+
+    <div id="driveFolderRow" class="driveX-row" style="display:none;">
+      <input id="inpDriveFolder" class="driveX-input" placeholder="Klasör linki veya ID" />
+    </div>
+
+    <div class="driveX-row">
+      <input id="inpDriveFilter" class="driveX-input" placeholder="Dosya ara…" />
+      <button id="btnDriveClear" class="driveX-icon" type="button" title="Temizle">✕</button>
+    </div>
+
+    <div id="driveList" class="driveX-list" aria-label="Drive files"></div>
+
+    <div class="driveX-bottom">
+      <button id="btnDriveOpen" class="driveX-primary" type="button">Seçileni Aç</button>
+      <div class="driveX-hint">PDF’ler <b>Şablon Stüdyosu</b> ile açılır.</div>
+    </div>
+  </div>
+</div>
+
 	  
 	 <div class="template-section">
     <div class="ts-header">
@@ -187,7 +237,7 @@
         </label>
 
         <label class="switch-card">
-          <input id="shuffleO" type="checkbox" checked>
+          <input id="shuffleO" type="checkbox">
           <span class="slider"></span>
           <span class="label">Şık Karıştır</span>
         </label>
@@ -330,6 +380,9 @@
     </div>
   </div>
 </div>
+
+
+
 </main>
 
 <script type="module" src="./js/app.js"></script>
@@ -343,9 +396,15 @@
     // panels
     const file = document.getElementById('tab-file');
     const text = document.getElementById('tab-text');
+    const drive = document.getElementById('tab-drive');
+
     if (file) file.style.display = (tab === 'file') ? 'block' : 'none';
     if (text) text.style.display = (tab === 'text') ? 'block' : 'none';
-  }const fileInp = document.getElementById('fileInput');
+    if (drive) drive.style.display = (tab === 'drive') ? 'block' : 'none';
+  }
+
+  // File input label update (existing behavior)
+  const fileInp = document.getElementById('fileInput');
   if(fileInp){
     fileInp.addEventListener('change', function(){
       const name = this.files[0] ? this.files[0].name : '';
@@ -358,7 +417,7 @@
         if(main) main.style.display = 'none';
         if(sub) sub.style.display = 'none';
       } else {
-        display.style.display = 'none';
+        if(display) display.style.display = 'none';
         if(main) main.style.display = '';
         if(sub) sub.style.display = '';
       }

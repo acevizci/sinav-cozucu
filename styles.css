@@ -3809,98 +3809,131 @@ body.sepia-mode .btn-ghost:hover {
 }
 
 /* =========================================
-   ÖZEL BİLDİRİM (TOAST) SİSTEMİ
+   ÖZEL BİLDİRİM (TOAST) - FİNAL (PATİ STİLİ)
    ========================================= */
 
-/* Bildirimlerin Duracağı Alan */
+/* Bildirim Konumu */
 #toastHost {
     position: fixed;
-    /* Sol üstten alıp sağ alta taşıyoruz */
-    bottom: 100px; /* Pati'nin biraz üzerinde olması için */
+    bottom: 90px; /* Pati'nin hemen üstü */
     right: 20px;
     z-index: 10000;
     display: flex;
     flex-direction: column;
     gap: 10px;
-    /* Bildirimlerin sağa yaslı durması için */
     align-items: flex-end;
     pointer-events: none;
 }
 
-/* Tekil Bildirim Kartı */
+/* KART YAPISI (Ekran Görüntüsündeki Gibi) */
 .toast-msg {
     pointer-events: auto;
-    min-width: 300px;
-    padding: 14px 20px;
-    border-radius: 12px;
-    font-size: 14px;
-    font-weight: 600;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+    /* Genişlik ve Boyut Ayarları */
+    min-width: 260px;
+    max-width: 320px;
+    padding: 12px 16px;
     
-    /* Animasyon (Yukarıdan düşüş) */
-    animation: toastSlideIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-    opacity: 0;
-    animation-fill-mode: forwards;
-}
-
-@keyframes toastSlideIn {
-    from {
-        transform: translateX(100%);
-        opacity: 0;
-    }
-    to {
-        transform: translateX(0);
-        opacity: 1;
-    }
-}
-
-/* Çıkış Animasyonu (JS ile eklenecek) */
-.toast-msg.hiding {
-    animation: toastSlideOut 0.3s ease forwards;
-}
-@keyframes toastSlideOut {
-    to { transform: translateY(-20px); opacity: 0; }
-}
-
-/* --- TEMA RENKLERİ --- */
-
-/* 1. KOYU MOD (Varsayılan) */
-.toast-msg {
-    background: rgba(30, 30, 40, 0.95);
-    border: 1px solid rgba(255,255,255,0.1);
-    color: #fff;
+    /* Dikey Dizilim: Başlık üstte, içerik altta */
+    display: flex;
+    flex-direction: column;
+    gap: 4px; /* Başlık ve metin arası boşluk */
+    
+    /* --- RENK VE CAM EFEKTİ (Pati Balonuyla Aynı) --- */
+    background: rgba(25, 25, 30, 0.95); /* Çok koyu, mat gri */
     backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    
+    /* Kenarlıklar */
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 14px; /* Apple tarzı yuvarlaklık */
+    
+    /* Gölge */
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+    
+    /* Animasyon */
+    opacity: 0;
+    transform: translateY(10px) scale(0.95);
+    animation: toastPop 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
 }
 
-/* 2. AÇIK MOD */
+/* 1. BAŞLIK ("Bildirim", "Hata", "Harika İş") */
+.toast-head {
+    font-size: 13px;
+    font-weight: 700; /* Kalın */
+    color: #ffffff;   /* Beyaz */
+    letter-spacing: 0.3px;
+    line-height: 1.2;
+}
+
+/* 2. GÖVDE (İkon + Mesaj) */
+.toast-body {
+    display: flex;
+    align-items: flex-start; /* Yazı çok satırlı olursa ikon yukarıda kalsın */
+    gap: 8px;
+}
+
+/* İkon (Metinle aynı hizada) */
+.toast-icon {
+    font-size: 14px; /* Metinle dengeli */
+    margin-top: 1px; /* Hafif optik hizalama */
+    flex-shrink: 0;
+}
+
+/* Mesaj Metni */
+.toast-text {
+    font-size: 13px;
+    font-weight: 400; /* Normal */
+    color: #b0b0b0;   /* Soluk gri (Ekran görüntüsündeki gibi) */
+    line-height: 1.4;
+}
+
+/* --- ANİMASYONLAR --- */
+@keyframes toastPop {
+    to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.toast-msg.hiding {
+    animation: toastFadeOut 0.2s ease forwards;
+}
+@keyframes toastFadeOut {
+    to { opacity: 0; transform: scale(0.9); }
+}
+
+/* --- TEMA RENK VURGULARI (Solda ince çizgi yerine ikon rengi) --- */
+
+/* Başarılı (Yeşil) */
+.toast-msg.success .toast-icon { color: #4ade80; }
+.toast-msg.success { border-left: 3px solid #22c55e; }
+
+/* Hata (Kırmızı) */
+.toast-msg.error .toast-icon { color: #f87171; }
+.toast-msg.error { border-left: 3px solid #ef4444; }
+
+/* Uyarı (Sarı) */
+.toast-msg.warn .toast-icon { color: #fbbf24; }
+.toast-msg.warn { border-left: 3px solid #f59e0b; }
+
+/* Normal (Mor) */
+.toast-msg.neutral .toast-icon { color: #c084fc; }
+.toast-msg.neutral { border-left: 3px solid #a855f7; }
+
+
+/* --- AÇIK MOD (LIGHT MODE) --- */
 body.light-mode .toast-msg {
-    background: #ffffff;
-    border: 1px solid #e4e4e7;
-    color: #18181b;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+    background: rgba(255, 255, 255, 0.95);
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
 }
+body.light-mode .toast-head { color: #111; }
+body.light-mode .toast-text { color: #555; }
 
-/* 3. KİTAP MODU (Sepya) - Ekran görüntündeki mod */
+/* --- SEPYA MOD (BOOK MODE) --- */
 body.sepia-mode .toast-msg {
-    background: #fdf6e3; /* Krem */
-    border: 1px solid #dcb; /* Kahvemsi çerçeve */
-    color: #5f4b32; /* Kahve yazı */
-    box-shadow: 0 10px 30px rgba(95, 75, 50, 0.15);
+    background: #fdf6e3;
+    border: 1px solid rgba(95, 75, 50, 0.2);
 }
-
-/* İKON VE TİPLER */
-.toast-icon { font-size: 18px; }
-
-/* Hata Mesajı (Kırmızımsı) */
-.toast-msg.error .toast-icon { color: #ef4444; }
-body.sepia-mode .toast-msg.error { border-left: 4px solid #ef4444; }
-
-/* Başarı Mesajı (Yeşilimsi) */
-.toast-msg.success .toast-icon { color: #22c55e; }
-body.sepia-mode .toast-msg.success { border-left: 4px solid #22c55e; }
+body.sepia-mode .toast-head { color: #5f4b32; }
+body.sepia-mode .toast-text { color: #8c7356; }
 
 /* =========================================
    GİRİŞ EKRANI KATMAN DÜZELTMESİ
@@ -4128,3 +4161,949 @@ body.book-theme .ts-icon-box .material-icons-round {
     box-shadow: 0 0 15px rgba(168, 85, 247, 0.5) !important;
     transform: scale(1.05);
 }
+/* ===== Drive Tab UI (v16) ===== */
+.drive-card{ background: rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.10); border-radius:16px; padding:14px; }
+.drive-row{ display:flex; gap:10px; align-items:center; margin:10px 0; flex-wrap:wrap; }
+.drive-input{ flex:1; min-width:240px; padding:10px 12px; border-radius:12px; border:1px solid rgba(255,255,255,0.14); background: rgba(0,0,0,0.15); color: inherit; }
+.drive-select{ width:100%; padding:10px; border-radius:12px; border:1px solid rgba(255,255,255,0.14); background: rgba(0,0,0,0.15); color: inherit; }
+.drive-label{ display:flex; gap:8px; align-items:center; padding:8px 10px; border:1px solid rgba(255,255,255,0.12); border-radius:999px; cursor:pointer; }
+.drive-status{ font-size:12px; opacity:0.85; }
+.drive-status.err{ color:#ff6b6b; opacity:1; }
+.drive-hint{ font-size:12px; opacity:0.75; margin-top:6px; }
+
+
+/* ===================== DRIVE PICKER MODERN (driveX - Compact v2) ===================== */
+.driveX{
+  --x-bg: rgba(255,255,255,.06);
+  --x-bg2: rgba(255,255,255,.10);
+  --x-br: rgba(255,255,255,.12);
+  --x-br2: rgba(255,255,255,.18);
+  --x-t: rgba(255,255,255,.92);
+  --x-m: rgba(255,255,255,.62);
+  --x-m2: rgba(255,255,255,.42);
+  --x-shadow: 0 18px 60px rgba(0,0,0,.45);
+  --x-glow: 0 0 0 4px rgba(120,210,255,.10);
+  --x-ac1: rgba(120,210,255,1);
+  --x-ac2: rgba(160,110,255,1);
+  color: var(--x-t);
+}
+
+.driveX-card{
+  /* Arkaplan aynı kalsın */
+  background: radial-gradient(120% 140% at 10% 0%, rgba(120,210,255,.12), transparent 45%),
+              radial-gradient(120% 140% at 90% 10%, rgba(160,110,255,.12), transparent 50%),
+              rgba(0,0,0,.30);
+  border: 1px solid var(--x-br);
+  border-radius: 18px; /* Diğer kartlarla uyumlu */
+  padding: 14px;
+  box-shadow: var(--x-shadow);
+  backdrop-filter: blur(14px);
+}
+
+.driveX-top{
+  display:flex; align-items:center; justify-content:space-between; gap: 10px; margin-bottom: 10px;
+}
+
+.driveX-title{ display:flex; gap: 8px; align-items:center; }
+
+.driveX-ico{
+  width: 32px; height: 32px; /* Küçültüldü */
+  display:grid; place-items:center;
+  border-radius: 10px;
+  background: rgba(255,255,255,.08);
+  border: 1px solid var(--x-br);
+  font-size: 16px;
+}
+
+.driveX-h1{ font-weight: 700; font-size: 14px; line-height: 1.1; }
+.driveX-sub{ font-size: 11px; color: var(--x-m); margin-top: 2px; }
+
+/* Listele Butonu (Temel Stil) */
+.driveX-cta{
+  border: 1px solid rgba(255,255,255,.14);
+  background: rgba(255,255,255,.08);
+  color: var(--x-t);
+  /* Küçültülen değerler: */
+  padding: 6px 12px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 600; /* 800'den 600'e indi */
+  cursor:pointer;
+  transition: all .15s ease;
+}
+.driveX-cta:hover{ transform: translateY(-1px); background: rgba(255,255,255,.11); border-color: var(--x-br2); }
+
+/* Segmented Control (Drive'ım / Klasör) */
+.driveX-seg{
+  display:flex; gap: 4px; padding: 4px;
+  border-radius: 12px;
+  background: rgba(255,255,255,.06);
+  border: 1px solid var(--x-br);
+  margin-bottom: 10px;
+}
+
+.driveX-pill{
+  flex:1;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--x-m);
+  /* Küçültülen değerler: */
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor:pointer;
+  transition: all .15s ease;
+}
+.driveX-pill:hover{ color: var(--x-t); }
+.driveX-pill.is-active{
+  color: var(--x-t);
+  background: rgba(255,255,255,.1);
+  border-color: rgba(255,255,255,.14);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  font-weight: 600;
+}
+
+.driveX-row{ display:flex; gap: 8px; align-items:center; margin-bottom: 8px; }
+
+.driveX-input{
+  flex:1;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(0,0,0,.28);
+  color: var(--x-t);
+  /* Daha zarif input: */
+  padding: 8px 10px;
+  font-size: 12px;
+  outline:none;
+  transition: all .15s ease;
+}
+.driveX-input::placeholder{ color: var(--x-m2); }
+.driveX-input:focus{
+  border-color: rgba(120,210,255,.40);
+  background: rgba(0,0,0,.4);
+}
+
+.driveX-icon{
+  width: 34px; height: 34px; /* Küçültüldü */
+  display:grid; place-items:center;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(255,255,255,.06);
+  color: var(--x-t);
+  cursor:pointer;
+  font-size: 14px;
+}
+
+.driveX-list{
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(0,0,0,.22);
+  padding: 4px;
+  max-height: 220px; /* Biraz daha kompakt liste */
+  overflow:auto;
+}
+
+.driveX-item{
+  display:flex; align-items:center; justify-content:space-between; gap: 10px;
+  padding: 8px 10px; /* Satır aralığı daraltıldı */
+  border-radius: 8px;
+  cursor:pointer;
+  border: 1px solid transparent;
+  transition: background .12s ease;
+}
+.driveX-item:hover{ background: rgba(255,255,255,.07); }
+.driveX-item.is-selected{
+  background: rgba(10, 132, 255, 0.15); /* Daha sade seçim rengi */
+  border-color: rgba(10, 132, 255, 0.3);
+}
+
+.driveX-name{ font-weight: 600; font-size: 12px; }
+.driveX-meta{ font-size: 10px; color: var(--x-m); }
+
+.driveX-bottom{ margin-top: 10px; display:flex; flex-direction:column; gap: 6px; }
+
+/* Seçileni Aç Butonu */
+.driveX-primary{
+  width: 100%;
+  padding: 10px 14px; /* Küçültüldü */
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  color: var(--x-t);
+  border: 1px solid rgba(120,210,255,.30);
+  background: linear-gradient(90deg, rgba(120,210,255,.22), rgba(160,110,255,.22));
+  box-shadow: 0 4px 15px rgba(0,0,0,.2);
+  cursor:pointer;
+  transition: transform .12s ease, box-shadow .12s ease;
+}
+.driveX-primary:hover{ transform: translateY(-1px); box-shadow: 0 8px 25px rgba(0,0,0,.3); }
+
+.driveX-hint{ font-size: 10px; color: var(--x-m); text-align:center; }
+.driveX-hint b{ color: var(--x-t); }
+
+/* Scrollbar */
+.driveX-list::-webkit-scrollbar{ width: 6px; }
+.driveX-list::-webkit-scrollbar-thumb{
+  background: rgba(255,255,255,.15); border-radius: 99px;
+}
+
+/* ===================== DRIVEX LISTELE BUTONU (VURGULU & KOMPAKT) ===================== */
+
+#btnDriveList {
+  /* 1. Canlı Renkler (Mavi - Mor Geçişi) */
+  background: linear-gradient(135deg, #0A84FF 0%, #a855f7 100%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.3) !important;
+  color: white !important;
+
+  /* 2. Kompakt Boyutlar (Diğer butonlarla uyumlu ama belirgin) */
+  padding: 8px 16px;       /* Yeterince geniş */
+  font-size: 13px;         /* Okunaklı */
+  font-weight: 700;        /* Kalın yazı */
+  border-radius: 12px;     /* Modern yuvarlaklık */
+  letter-spacing: 0.5px;
+
+  /* 3. Parlama ve Animasyon */
+  box-shadow: 0 4px 15px rgba(10, 132, 255, 0.4);
+  animation: pulse-attention 2s infinite ease-in-out;
+  
+  /* Pozisyon ayarı */
+  position: relative;
+  overflow: hidden;
+  transition: all 0.2s ease;
+}
+
+/* Hover (Üzerine Gelince) */
+#btnDriveList:hover {
+  transform: translateY(-2px) scale(1.03); /* Hafifçe büyüsün */
+  box-shadow: 0 8px 25px rgba(168, 85, 247, 0.6); /* Gölgeyi artır */
+  background: linear-gradient(135deg, #a855f7 0%, #0A84FF 100%) !important; /* Rengi ters çevir */
+  animation: none; /* Titremeyi durdur, netleşsin */
+}
+
+/* Animasyon Keyframes (Eğer silindiyse tekrar ekleyelim) */
+@keyframes pulse-attention {
+  0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(10, 132, 255, 0.7); }
+  50% { transform: scale(1.02); box-shadow: 0 0 0 6px rgba(10, 132, 255, 0); }
+  100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(10, 132, 255, 0); }
+}
+
+/* --- TEMA UYUMLULUĞU --- */
+
+/* Aydınlık Mod (Light Mode) */
+body.light-mode #btnDriveList {
+  border-color: rgba(0,0,0,0.1) !important;
+  box-shadow: 0 4px 15px rgba(10, 132, 255, 0.3);
+}
+
+/* Kitap Modu (Sepia) - Turuncu Tonları */
+body.sepia-mode #btnDriveList {
+  background: linear-gradient(135deg, #d97706 0%, #b45309 100%) !important;
+  border-color: rgba(95, 75, 50, 0.2) !important;
+  box-shadow: 0 4px 15px rgba(217, 119, 6, 0.4);
+}
+body.sepia-mode #btnDriveList:hover {
+  background: linear-gradient(135deg, #b45309 0%, #d97706 100%) !important;
+}
+
+
+/* ===================== DRIVE BREADCRUMB (GEZİNME ÇUBUĞU) ===================== */
+.driveX-crumbs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 10px;
+  border: 1px solid var(--stroke);
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.crumb-item {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: all 0.2s;
+}
+
+.crumb-item:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text);
+}
+
+.crumb-item.active {
+  color: var(--accent);
+  background: rgba(168, 85, 247, 0.1);
+  pointer-events: none; /* Son öğeye tıklanmaz */
+}
+
+.crumb-sep {
+  color: var(--muted);
+  font-size: 10px;
+  opacity: 0.5;
+}
+
+/* Klasör İkonu Rengi ve İkon Kutusu */
+.driveX-icon-box {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.05);
+  font-size: 18px;
+}
+
+/* Klasör ise sarı yap */
+.driveX-item[data-mime="application/vnd.google-apps.folder"] .driveX-icon-box {
+  color: #fbbf24; 
+  background: rgba(251, 191, 36, 0.1);
+}
+
+/* Light Mode Uyumu */
+body.light-mode .driveX-crumbs {
+  background: #f4f4f5;
+  border-color: #e4e4e7;
+}
+body.light-mode .crumb-item:hover {
+  background: #e4e4e7;
+  color: #000;
+}
+
+/* ===================== PATI MINI MOD (SINAV ODAK) ===================== */
+
+/* 1. Sınavda Gizlenecekler */
+#patiWidget.mini .pati-stats-area,
+#patiWidget.mini .btn-feed,
+#patiWidget.mini .pati-lvl {
+  display: none !important;
+}
+
+/* 2. Konteynerı Küçült ve Yuvarla */
+#patiWidget.mini .pati-container {
+  padding: 0;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%; /* Tam yuvarlak */
+  justify-content: center;
+  gap: 0;
+  
+  /* Daha minimalist görünüm */
+  background: rgba(30, 30, 40, 0.4); 
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(4px);
+  box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+}
+
+/* 3. Avatarı Ortala */
+#patiWidget.mini .pati-avatar {
+  font-size: 24px; /* Boyutu biraz küçült */
+  margin: 0;
+  transform: none !important; /* Duruşu sabitle */
+  pointer-events: none; /* Sınavda tıklanmasın */
+}
+
+/* 4. Konuşma Balonu Konumu (Mini iken biraz daha aşağıya) */
+#patiWidget.mini .pati-bubble {
+  bottom: 60px; /* Balonu biraz yukarı kaldır */
+  right: 0;
+  font-size: 11px; /* Yazıyı küçült */
+  padding: 8px 12px;
+}
+
+/* ============================================================
+   📱 MOBİL CİLA: NATIVE APP NAVİGASYON BARI
+   ============================================================ */
+
+@media (max-width: 900px) {
+
+  /* 1. Alt Navigasyon Barı (Sabit & Glassmorphism) */
+  #navPanel {
+    display: flex !important; /* Gizliliği kaldır */
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    top: auto; /* Üstteki yapışkanlığı iptal et */
+    
+    height: auto;
+    max-height: 85px;
+    width: 100%;
+    
+    /* Modern Koyu Cam Görünümü */
+    background: rgba(20, 20, 30, 0.90) !important;
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    
+    border-right: none;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 24px 24px 0 0; /* Üst köşeleri yuvarla */
+    z-index: 9000;
+    
+    /* iPhone X+ için alt güvenli alan boşluğu */
+    padding-bottom: env(safe-area-inset-bottom, 20px);
+    box-shadow: 0 -10px 40px rgba(0,0,0,0.5);
+    
+    /* Giriş/Çıkış Animasyonu */
+    animation: slideUpNav 0.4s cubic-bezier(0.19, 1, 0.22, 1);
+  }
+
+  @keyframes slideUpNav {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+  }
+
+  /* 2. Başlığı Gizle (Mobilde yer kaplamasın) */
+  .navHeader { display: none !important; }
+
+  /* 3. Yatay Kaydırılabilir Grid */
+  .navGrid {
+    display: flex;
+    flex-direction: row; /* Yan yana diz */
+    flex-wrap: nowrap;   /* Asla alt satıra geçme */
+    
+    overflow-x: auto;    /* Yatay scroll aç */
+    overflow-y: hidden;
+    
+    padding: 15px 20px 10px 20px; /* Rahat dokunma payı */
+    gap: 12px;
+    
+    width: 100%;
+    max-height: none;
+    background: transparent !important;
+    border: none;
+    
+    /* Kaydırma Hissi (Snapping) */
+    scroll-snap-type: x mandatory; 
+    scroll-behavior: smooth;
+    
+    /* Scrollbar'ı Gizle (Daha temiz görünüm) */
+    scrollbar-width: none; /* Firefox */
+  }
+  .navGrid::-webkit-scrollbar { display: none; /* Chrome/Safari */ }
+
+  /* 4. Butonlar (Daha Büyük & Dokunmatik Dostu) */
+  .navBtn {
+    flex: 0 0 48px; /* Genişliği sabitle */
+    height: 48px;   /* Yüksekliği sabitle */
+    border-radius: 14px;
+    font-size: 15px;
+    font-weight: 700;
+    scroll-snap-align: center; /* Ortada dursun */
+    box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+  }
+
+  /* Aktif Soru (Parlayan Efekt) */
+  .navBtn.active {
+    transform: scale(1.1);
+    box-shadow: 0 0 15px var(--accent);
+    border-color: var(--accent);
+    background: var(--accent) !important;
+    color: white !important;
+  }
+
+  /* 5. Sayfa Düzeni Düzeltmeleri */
+  .exam-container {
+    height: 100vh; /* Mobilde tam ekran */
+  }
+  
+  .paper-area {
+    /* Navigasyon barın altında içerik kalmasın diye alt boşluk */
+    padding-bottom: 120px !important; 
+  }
+  
+  /* Focus Mod Açıkken Navigasyonu Gizle (Çakışmasın) */
+  body.focusMode #navPanel {
+    display: none !important;
+  }
+}
+
+/* ================= CANLI PATİ ANİMASYONLARI ================= */
+
+/* 1. Temel Nefes Alma (Her zaman çalışır) */
+#patiAvatar {
+  display: inline-block;
+  transform-origin: bottom center; /* Hareket merkezini alt yap */
+  transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+  /* Sürekli hafif nefes alma efekti */
+  animation: pati-breathe 3s infinite ease-in-out;
+}
+
+@keyframes pati-breathe {
+  0%, 100% { transform: scale(1) translateY(0); }
+  50% { transform: scale(1.05) translateY(-2px); } /* Hafif büyü ve yüksel */
+}
+
+/* 2. Rastgele Hareketler (JS ile tetiklenecek sınıflar) */
+
+/* Sağa Sola Bakma (Tilt) */
+#patiAvatar.action-tilt {
+  animation: pati-tilt 1s ease-in-out;
+}
+@keyframes pati-tilt {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(-15deg) scale(1.1); }
+  75% { transform: rotate(10deg) scale(1.1); }
+}
+
+/* Koklama / Titreme (Sniff) */
+#patiAvatar.action-sniff {
+  animation: pati-sniff 0.8s linear;
+}
+@keyframes pati-sniff {
+  0% { transform: translateX(0); }
+  25% { transform: translateX(-3px) rotate(-2deg); }
+  50% { transform: translateX(3px) rotate(2deg); }
+  75% { transform: translateX(-3px) rotate(-2deg); }
+  100% { transform: translateX(0); }
+}
+
+/* Zıplama / Heyecan (Jump) */
+#patiAvatar.action-jump {
+  animation: pati-jump 0.6s ease-out;
+}
+@keyframes pati-jump {
+  0% { transform: translateY(0) scale(1); }
+  40% { transform: translateY(-15px) scale(1.1, 0.9); } /* Zıpla ve ezil */
+  100% { transform: translateY(0) scale(1); }
+}
+
+/* 3. Uyku Modu (Hareketsizken) */
+#patiAvatar.action-sleep {
+  opacity: 0.8;
+  filter: grayscale(0.4);
+  animation: pati-sleep 4s infinite ease-in-out;
+}
+@keyframes pati-sleep {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(0.95) translateY(2px); }
+}
+
+/* ================= YENİ: PATİ DÖNME EFEKTİ ================= */
+
+/* Kendi Etrafında Dönme (3D Spin) */
+#patiAvatar.action-spin {
+  animation: pati-spin 0.8s ease-in-out;
+}
+
+@keyframes pati-spin {
+  0% { transform: rotateY(0deg) scale(1); }
+  50% { transform: rotateY(180deg) scale(1.1); } /* Dönerken hafifçe büyüsün (Heyecan) */
+  100% { transform: rotateY(360deg) scale(1); }
+}
+
+/* ================= HEADER MODERNİZASYON (FİNAL) ================= */
+
+/* 1. Ana Kapsayıcı (Cam Efekti) */
+.glass-header {
+  position: relative;
+  z-index: 100;
+  padding: 12px 24px;
+  margin-bottom: 24px;
+  
+  /* Modern Cam Arka Plan */
+  background: rgba(20, 20, 30, 0.6); /* Koyu yarı şeffaf */
+  backdrop-filter: blur(12px) saturate(180%);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0 0 24px 24px; /* Alt köşeleri yuvarla */
+  box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+}
+
+.header-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+/* 2. Logo ve Marka Alanı */
+.brand-area {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.logo-circle {
+  font-size: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  
+  /* Beyin Nabız Animasyonu 🧠 */
+  animation: brain-pulse 3s infinite ease-in-out;
+  filter: drop-shadow(0 0 8px rgba(168, 85, 247, 0.5));
+}
+
+@keyframes brain-pulse {
+  0%, 100% { transform: scale(1); filter: drop-shadow(0 0 8px rgba(168, 85, 247, 0.4)); }
+  50% { transform: scale(1.12); filter: drop-shadow(0 0 20px rgba(168, 85, 247, 0.7)); }
+}
+
+.title-group h1 {
+  font-size: 22px;
+  font-weight: 800;
+  margin: 0;
+  line-height: 1;
+  letter-spacing: -0.5px;
+  
+  /* Degrade Yazı (Parlak Beyaz -> Gri) */
+  background: linear-gradient(135deg, #fff 0%, #94a3b8 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.sub {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  font-weight: 500;
+  margin-top: 4px;
+  letter-spacing: 0.2px;
+}
+
+/* Sürüm Rozeti (v1.2) */
+.version-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 8px;
+  background: rgba(168, 85, 247, 0.15);
+  color: #d8b4fe;
+  border: 1px solid rgba(168, 85, 247, 0.25);
+  margin-left: 8px;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+/* 3. Durum Hapları (Hazırlık / Anahtar) */
+.status-group {
+  display: flex;
+  gap: 12px;
+}
+
+.h-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 14px;
+  
+  /* Cam Kapsül */
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #e2e8f0;
+  font-size: 13px;
+  font-weight: 600;
+  transition: all 0.2s ease;
+  cursor: default;
+}
+
+.h-pill:hover {
+  background: rgba(255, 255, 255, 0.08);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.h-icon { font-size: 14px; opacity: 0.9; }
+
+/* 4. Sağ Taraf (Kullanıcı & Butonlar) */
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.user-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px 6px 6px;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 20px;
+}
+
+.user-avatar {
+  font-size: 16px;
+  background: rgba(255,255,255,0.1);
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  display: grid; place-items: center;
+}
+
+.user-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #cbd5e1;
+}
+
+/* Butonlar (Tema/Çıkış) */
+.theme-btn-icon, .btn-logout-header {
+  width: 36px; height: 36px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+  color: #e2e8f0;
+  display: grid; place-items: center;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.theme-btn-icon:hover, .btn-logout-header:hover {
+  background: rgba(255, 255, 255, 0.15);
+  transform: translateY(-1px);
+}
+
+/* ================= TEMA UYUMLARI ================= */
+
+/* Sepya Modu (Kitap Havası) */
+body.sepia-mode .glass-header {
+  background: rgba(253, 246, 227, 0.65); /* Krem Cam */
+  border-bottom: 1px solid rgba(95, 75, 50, 0.15);
+}
+body.sepia-mode .title-group h1 {
+  background: linear-gradient(135deg, #5f4b32 0%, #8c7356 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+body.sepia-mode .sub { color: rgba(95, 75, 50, 0.6); }
+body.sepia-mode .h-pill {
+  background: rgba(95, 75, 50, 0.08);
+  border-color: rgba(95, 75, 50, 0.15);
+  color: #5f4b32;
+}
+body.sepia-mode .version-badge {
+  background: rgba(95, 75, 50, 0.1);
+  color: #5f4b32;
+  border-color: rgba(95, 75, 50, 0.2);
+}
+body.sepia-mode .user-chip, 
+body.sepia-mode .theme-btn-icon, 
+body.sepia-mode .btn-logout-header {
+  background: rgba(95, 75, 50, 0.05);
+  border-color: rgba(95, 75, 50, 0.15);
+  color: #5f4b32;
+}
+body.sepia-mode .user-name { color: #5f4b32; }
+
+/* Aydınlık Mod (Light) */
+body.light-mode .glass-header {
+  background: rgba(255, 255, 255, 0.8);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
+body.light-mode .title-group h1 {
+  background: linear-gradient(135deg, #1e293b 0%, #475569 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+body.light-mode .sub { color: #64748b; }
+body.light-mode .h-pill {
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.08);
+  color: #334155;
+}
+body.light-mode .user-chip, 
+body.light-mode .theme-btn-icon, 
+body.light-mode .btn-logout-header {
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.08);
+  color: #334155;
+}
+body.light-mode .user-name { color: #334155; }
+
+/* ================= YENİ MODERN LOGO İKONU ================= */
+
+/* 1. İkon Yuvası (Modern Kutu) */
+.logo-circle.modern-icon {
+  width: 40px;  /* Sabit genişlik */
+  height: 40px; /* Sabit yükseklik */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  
+  /* Tam yuvarlak yerine modern yumuşak kare */
+  border-radius: 12px; 
+
+  /* Fütüristik Degrade Arka Plan (Mor -> Mavi) */
+  background: linear-gradient(135deg, #a855f7 0%, #3b82f6 100%);
+
+  /* Dışarıya Saçılan "Zeka Işığı" */
+  box-shadow: 0 0 25px rgba(168, 85, 247, 0.5);
+  
+  position: relative;
+  overflow: hidden; /* İçindeki ışık taşmasın */
+  border: 1px solid rgba(255, 255, 255, 0.2); /* İnce cam çerçeve */
+}
+
+/* Kutu üzerine düşen hafif parlama efekti (Opsiyonel) */
+.logo-circle.modern-icon::after {
+  content: '';
+  position: absolute;
+  top: -50%; left: -50%;
+  width: 200%; height: 200%;
+  background: radial-gradient(circle, rgba(255,255,255,0.3) 0%, transparent 60%);
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+/* 2. İçindeki Kıvılcım (✦) */
+.spark {
+  font-size: 22px;
+  color: #ffffff; /* Beyaz renk */
+  display: inline-block;
+  
+  /* Sürekli hafifçe dönen ve parlayan animasyon */
+  animation: spark-intelligence 6s linear infinite;
+}
+
+/* Animasyon Tanımı: Yavaşça dön ve parılda */
+@keyframes spark-intelligence {
+  0% {
+    transform: rotate(0deg) scale(1);
+    filter: drop-shadow(0 0 2px rgba(255,255,255,0.6));
+  }
+  50% {
+    transform: rotate(180deg) scale(1.15); /* Ortada biraz büyü ve parla */
+    filter: drop-shadow(0 0 10px rgba(255,255,255,0.9));
+  }
+  100% {
+    transform: rotate(360deg) scale(1);
+    filter: drop-shadow(0 0 2px rgba(255,255,255,0.6));
+  }
+}
+
+/* --- TEMA UYUMLARI --- */
+
+/* Sepya Modu için Logoyu Uyarlama (Kahve Tonları) */
+body.sepia-mode .logo-circle.modern-icon {
+  background: linear-gradient(135deg, #8c7356 0%, #5f4b32 100%);
+  box-shadow: 0 0 20px rgba(95, 75, 50, 0.4);
+  border-color: rgba(95, 75, 50, 0.3);
+}
+
+/* Aydınlık Mod için (Daha net mavi) */
+body.light-mode .logo-circle.modern-icon {
+  background: linear-gradient(135deg, #3b82f6 0%, #06b6d4 100%);
+  box-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
+}
+
+/* ================= KULLANICI DROPDOWN MENÜSÜ ================= */
+
+/* 1. Kapsayıcı (Pozisyonlama için) */
+.user-menu-wrapper {
+    position: relative; /* Dropdown buna göre konumlanacak */
+}
+
+/* 2. Kullanıcı Çipi (Tıklanabilir) */
+.user-chip {
+    cursor: pointer; /* Tıklanabilir el işareti */
+    transition: all 0.2s ease;
+    padding-right: 14px; /* Ok işareti için yer */
+}
+
+.user-chip:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+/* Küçük Ok İşareti */
+.dropdown-arrow {
+    font-size: 10px;
+    margin-left: 6px;
+    opacity: 0.6;
+    transition: transform 0.3s ease;
+}
+
+/* Menü açıldığında ok dönsün */
+.user-menu-wrapper.active .dropdown-arrow {
+    transform: rotate(180deg);
+}
+
+/* 3. Açılır Menü (Glass Style) */
+.glass-dropdown {
+    position: absolute;
+    top: 120%; /* Çipin hemen altı */
+    right: 0;
+    width: 160px;
+    
+    /* Gizlilik Ayarları */
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-10px);
+    transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+    
+    /* Cam Tasarımı */
+    background: rgba(30, 30, 40, 0.95);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 14px;
+    padding: 6px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+    z-index: 1000;
+}
+
+/* Menü Aktif Olduğunda */
+.user-menu-wrapper.active .glass-dropdown {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}
+
+/* 4. Menü Elemanları */
+.dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    color: #e2e8f0;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.dropdown-item:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+}
+
+.item-icon { font-size: 16px; }
+
+/* --- TEMA UYUMLARI --- */
+body.light-mode .glass-dropdown {
+    background: rgba(255, 255, 255, 0.95);
+    border-color: rgba(0,0,0,0.1);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+}
+body.light-mode .dropdown-item { color: #334155; }
+body.light-mode .dropdown-item:hover { background: rgba(0,0,0,0.05); }
+
+body.sepia-mode .glass-dropdown {
+    background: #fdf6e3;
+    border-color: rgba(95, 75, 50, 0.2);
+}
+body.sepia-mode .dropdown-item { color: #5f4b32; }
+body.sepia-mode .dropdown-item:hover { background: rgba(95, 75, 50, 0.1); }
+
+/* seçili + doğru: yeşil baskın gelsin */
+.opt.correct-chosen,
+.opt.correct-chosen:has(input:checked),
+.opt.correct-chosen input:checked + div {
+  /* mevcut correct stilin neyse onu zorla uygula */
+  /* örnek: */
+  border-color: #2ecc71 !important;
+  background: rgba(46, 204, 113, 0.12) !important;
+}
+
+
