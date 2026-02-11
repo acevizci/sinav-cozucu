@@ -868,57 +868,100 @@ window.addEventListener("click", function(e) {
 });
 
 /* =========================================
-   SORUN BİLDİRİM SİSTEMİ (BUG REPORT)
+   SORUN BİLDİRİM SİSTEMİ (FORMSPREE)
    ========================================= */
 
-// Gerekli Firebase Fonksiyonlarını Alalım (Eğer import sorunu yaşarsan en tepeye ekle)
-// import { getFirestore, collection, addDoc } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-firestore.js";
-// NOT: Zaten window.db tanımlıysa gerek yok. Biz window.db kullanacağız.
-
-const uiReportBtn = document.getElementById("btnReportBug");
-const uiReportModal = document.getElementById("reportModal");
-const uiCloseReport = document.getElementById("btnCloseReport");
+const uiReportModal  = document.getElementById("reportModal");
+const uiReportText   = document.getElementById("reportText");
+const uiSendReport   = document.getElementById("btnSendReport");
 const uiCancelReport = document.getElementById("btnCancelReport");
-const uiSendReport = document.getElementById("btnSendReport");
-const uiReportText = document.getElementById("reportText");
+const uiReportBtn    = document.getElementById("btnReportBug");
 
-// ---- Report modal helpers (robust + idempotent) ----
-function openReportModal(){
+const openModal = () => {
   if (!uiReportModal) return;
   uiReportModal.style.display = "flex";
-  if (uiReportText){
-    uiReportText.value = "";
-    // focus next tick to ensure visible
-    setTimeout(() => uiReportText.focus(), 0);
-  }
-}
-function closeReportModal(){
+  if (uiReportText) uiReportText.value = "";
+};
+
+const closeModal = () => {
   if (!uiReportModal) return;
   uiReportModal.style.display = "none";
-}
+};
 
-// 1) Modal open (use addEventListener; avoid overwrite + survive re-renders)
-if (uiReportBtn){
-  uiReportBtn.setAttribute("type","button");
-  uiReportBtn.addEventListener("click", (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    openReportModal();
-  });
-} else {
-  console.warn("[report] #btnReportBug bulunamadı (index.html kontrol)");
-}
+uiReportBtn?.addEventListener("click", (e) => {
+  e.preventDefault();
+  openModal();
+});
 
-// 2) Close buttons
-if (uiCloseReport) uiCloseReport.addEventListener("click", (e) => { e.preventDefault(); closeReportModal(); });
-if (uiCancelReport) uiCancelReport.addEventListener("click", (e) => { e.preventDefault(); closeReportModal(); });
+uiCancelReport?.addEventListener("click", (e) => {
+  e.preventDefault();
+  closeModal();
+});
 
-// 3) Overlay click to close (optional UX)
-if (uiReportModal){
-  uiReportModal.addEventListener("click", (e) => {
-    if (e.target === uiReportModal) closeReportModal();
-  });
-}
+// Dışarı tıklayınca kapat (modal overlay’e tıklanırsa)
+uiReportModal?.addEventListener("click", (e) => {
+  if (e.target === uiReportModal) closeModal();
+});
+
+// ESC ile kapat
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") closeModal();
+});
+
+uiSendReport?.addEventListener("click", async (e) => {
+  e.preventDefault(); // form submit olmasın
+
+  const selectedOption = document.querySelector('input[name="reportType"]:checked');
+  const category = selectedOption?.value || "Genel";
+  const message = uiReportText?.value.trim() || "";
+
+  if (!message) {
+    window.showToast?.("Lütfen bir mesaj yaz şampiyon! 😊", "warn");
+    return;
+  }
+
+  uiSendReport.textContent = "Roketleniyor... 🚀";
+  uiSendReport.disabled = true;
+
+  try {
+    const payload = {
+      kategori: category,
+      mesaj: message,
+      kullanici: localStorage.getItem("user_name") || "Anonim Kullanıcı",
+      sayfa: window.location.href,
+      tarayici: navigator.userAgent
+    };
+
+    const response = await fetch("https://formspree.io/f/xzdadqvz", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+      },
+      body: JSON.stringify(payload)
+    });
+
+    // Hata ayıklamayı kolaylaştır
+    const data = await response.json().catch(() => null);
+
+    if (!response.ok) {
+      console.error("Formspree hata:", response.status, data);
+      throw new Error((data && data.error) ? data.error : "Formspree yanıt vermedi.");
+    }
+
+    window.showToast?.("Raporun e-postana uçtu! 🕵️‍♂️", "success");
+    closeModal();
+    if (uiReportText) uiReportText.value = "";
+
+  } catch (err) {
+    console.error("Gönderim hatası:", err);
+    window.showToast?.("Gönderilemedi, tekrar dene.", "error");
+  } finally {
+    uiSendReport.textContent = "Gönder Gitsin! 🚀";
+    uiSendReport.disabled = false;
+  }
+});
+
 
 
 /* =========================================
@@ -985,63 +1028,10 @@ window.showToast = function(input, typeArg = 'neutral') {
 };
 
 /* =========================================
-   2. GÜNCELLENMİŞ RAPOR GÖNDERME
+   2. RAPOR GÖNDERME (DEPRECATED - FIREBASE KALDIRILDI)
+   Not: Rapor sistemi artık yukarıdaki Formspree bloğu ile çalışır.
+   Bu blok, window.collection/addDoc hatasına sebep olduğu için devre dışı bırakıldı.
    ========================================= */
-if (uiSendReport) {
-    uiSendReport.onclick = async () => {
-        
-        // A. Kategori Seçimini Al (Böcek, Fikir, Sevgi)
-        const selectedOption = document.querySelector('input[name="reportType"]:checked');
-        const category = selectedOption ? selectedOption.value : "Genel";
-
-        // B. Mesajı Al
-        const rawMsg = uiReportText.value.trim();
-
-        // C. Boş mu Kontrol Et (Toast ile Uyar)
-        if (!rawMsg) {
-            window.showToast("Lütfen boş mesaj gönderme şampiyon! 😊", "error");
-            return;
-        }
-
-        // D. Butonu Kilitle (Animasyon)
-        uiSendReport.textContent = "Roket Kalkıyor... 🚀";
-        uiSendReport.disabled = true;
-
-        try {
-            // E. Mesajı Formatla: "[Fikir] Mesaj içeriği..."
-            const finalMsg = `[${category}] ${rawMsg}`;
-
-            // F. Firebase'e Kaydet
-            await window.addDoc(window.collection(window.db, "reports"), {
-                message: finalMsg,
-                sender: localStorage.getItem("user_name") || "Gizli Kahraman",
-                date: new Date(),
-                userAgent: navigator.userAgent,
-                location: window.location.href
-            });
-
-            // G. Başarılı! (Toast Göster)
-            window.showToast("Mesajın başarıyla ışınlandı! 🕵️‍♂️", "success");
-            
-            closeReportModal();
-            uiReportText.value = ""; // Kutuyu temizle
-
-        } catch (error) {
-            console.error("Rapor hatası:", error);
-            // Hata Durumu (Toast Göster)
-            window.showToast("Hata oluştu: " + error.message, "error");
-        } finally {
-            // H. Butonu Eski Haline Getir
-            uiSendReport.textContent = "Gönder Gitsin! 🚀";
-            uiSendReport.disabled = false;
-        }
-    };
-}
-
-// Pencere dışına tıklayınca kapat
-window.addEventListener("click", (e) => {
-    if (e.target === uiReportModal) closeReportModal();
-});
 
 // ==========================================
 // 🧩 TEMPLATE STUDIO ENTEGRASYONU (STATEFUL / WORKFLOW-SAFE)
