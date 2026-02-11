@@ -1588,24 +1588,135 @@ body.light-mode .status-dot, body.sepia-mode .status-dot {
 /* =========================================
    DİNAMİK AI UYARISI (MINIMIZE/MAXIMIZE)
    ========================================= */
-
+/* --- BAR KONUMU --- */
 .ai-disclaimer-bar {
-  position: fixed;
-  bottom: 20px;
-  left: 20px; /* Ortalamak yerine soldan boşluk verdik */
-  /* transform: translateX(-50%);  <-- BU SATIRI SİLDİK */
-  z-index: 900;
-  width: auto;
-  pointer-events: none;
+    position: fixed;
+    bottom: 20px;
+    left: 20px;
+    z-index: 10000;
+    /* Temadaki yazı tipini miras al */
+    font-family: inherit; 
+    color: inherit;
 }
 
-/* Mobil için biraz daha kenara yanaşsın */
-@media (max-width: 600px) {
-  .ai-disclaimer-bar {
-    left: 10px;
-    bottom: 10px;
-  }
+/* --- ANA GÖVDE (GLASS EFEKTİ - TEMA DOSTU) --- */
+.ai-disclaimer-bar .disclaimer-track {
+    display: flex;
+    align-items: center;
+    
+    /* TEMA UYUMU İÇİN KRİTİK NOKTA: */
+    /* Arka planı yarı saydam yapıyoruz, böylece alttaki temanın rengini alır */
+    background: var(--glass-bg, rgba(255, 255, 255, 0.1)); 
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    
+    /* Kenarlık da temaya uysun */
+    border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.2));
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+    
+    border-radius: 99px;
+    height: 44px; 
+    padding: 3px; /* Logo kenarlara yapışmasın */
+    overflow: hidden; 
 }
+
+/* Koyu mod aktifse barın arka planını karart (Eğer body'de class varsa) */
+body.dark-mode .ai-disclaimer-bar .disclaimer-track,
+body.dark-theme .ai-disclaimer-bar .disclaimer-track {
+    background: rgba(30, 30, 30, 0.6); /* Koyu cam */
+    border-color: rgba(255, 255, 255, 0.1);
+}
+
+/* --- 1. LOGO KUTUSU (SABİT & SAĞLAM) --- */
+.ai-disclaimer-bar .d-logo-circle {
+    width: 36px;      /* Sabit boyut */
+    height: 36px;
+    flex-shrink: 0;   /* ASLA KÜÇÜLME! */
+    
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    
+    /* Arka plan yok, tema rengi neyse o */
+    background: transparent; 
+    border-radius: 50%;
+    
+    cursor: help;
+    z-index: 10;
+    
+    /* Zıplama Animasyonu */
+    animation: bounceIcon 3s infinite ease-in-out;
+}
+
+/* İkonun Kendisi */
+.d-icon {
+    font-size: 1.4rem; 
+    /* İkon rengi metin rengiyle aynı olsun */
+    color: currentColor; 
+    filter: drop-shadow(0 2px 5px rgba(0,0,0,0.2));
+}
+
+/* --- 2. YAZI KUTUSU (KAPANAN ALAN) --- */
+.ai-disclaimer-bar .d-text-wrapper {
+    overflow: hidden;
+    
+    /* Başlangıç */
+    max-width: 400px; 
+    opacity: 1;
+    margin-left: 8px; /* İkonla yazı arası */
+    
+    /* KAPANMA ANİMASYONU: 5 sn bekle, kapan */
+    animation: closeTextZone 0.8s cubic-bezier(0.4, 0, 0.2, 1) forwards 10s;
+}
+
+/* --- 3. KAYAN YAZI --- */
+.ai-disclaimer-bar .d-marquee {
+    white-space: nowrap;
+    font-size: 0.85rem;
+    font-weight: 500;
+    
+    /* Metin rengini ana temadan al */
+    color: inherit; 
+    
+    display: inline-block;
+    padding-left: 100%;
+    animation: scrollLinear 9s linear infinite;
+}
+
+/* --- ANİMASYONLAR --- */
+
+@keyframes closeTextZone {
+    to {
+        max-width: 0;
+        opacity: 0;
+        margin-left: 0; /* Boşluğu sıfırla */
+    }
+}
+
+@keyframes scrollLinear {
+    from { transform: translateX(0); }
+    to { transform: translateX(-100%); }
+}
+
+@keyframes bounceIcon {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-4px); }
+}
+
+/* --- 4. HOVER (ÜZERİNE GELİNCE AÇ) --- */
+/* Animasyonu eziyoruz */
+.ai-disclaimer-bar:hover .d-text-wrapper {
+    animation: none !important;
+    max-width: 400px !important;
+    opacity: 1 !important;
+    margin-left: 8px !important;
+}
+
+/* Hover olunca yazı dursun */
+.ai-disclaimer-bar:hover .d-marquee {
+    animation-play-state: paused;
+}
+
 
 .disclaimer-content {
   background: rgba(255, 255, 255, 0.65);
@@ -1668,30 +1779,6 @@ body.light-mode .status-dot, body.sepia-mode .status-dot {
   transition: transform 0.4s ease;
 }
 
-/* =========================================
-   KÜÇÜLTÜLMÜŞ (MINIMIZED) DURUM
-   ========================================= */
-.ai-disclaimer-bar.minimized .disclaimer-content {
-  padding: 8px; /* Padding küçülür */
-  gap: 0;
-  max-width: 42px; /* Sadece ikon sığacak kadar küçült */
-  border-color: rgba(255, 255, 255, 0.6);
-}
-
-.ai-disclaimer-bar.minimized .d-text {
-  opacity: 0; /* Metni gizle */
-  width: 0;   /* Yer kaplamasın */
-  margin: 0;
-}
-
-.ai-disclaimer-bar.minimized .d-toggle-btn {
-  background: transparent; /* Buton arkaplanını kaldır */
-}
-
-/* Ok ikonunu yukarı çevir */
-.ai-disclaimer-bar.minimized .d-toggle-btn svg {
-  transform: rotate(180deg); 
-}
 
 /* Koyu Tema Uyumu */
 body:not(.light-mode):not(.sepia-mode) .disclaimer-content {
