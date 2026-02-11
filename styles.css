@@ -4907,6 +4907,7 @@ body.light-mode .crumb-item:hover {
   display: flex;
   align-items: center;
   gap: 12px;
+  flex-shrink: 0;
 }
 
 .user-chip {
@@ -4933,21 +4934,34 @@ body.light-mode .crumb-item:hover {
   color: #cbd5e1;
 }
 
-/* Butonlar (Tema/Çıkış) */
-.theme-btn-icon, .btn-logout-header {
-  width: 36px; height: 36px;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.05);
-  color: #e2e8f0;
-  display: grid; place-items: center;
-  cursor: pointer;
-  transition: all 0.2s;
+/* Sağ taraftaki grup için düzen */
+.header-right {
+    display: flex;
+    align-items: center;
+    gap: 12px; /* Elemanlar arası boşluk */
+    flex-shrink: 0; /* Bu alanın daralmasını engeller */
 }
 
-.theme-btn-icon:hover, .btn-logout-header:hover {
-  background: rgba(255, 255, 255, 0.15);
-  transform: translateY(-1px);
+/* Tema butonu için düzeltme */
+.theme-btn-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;  /* Sabit genişlik */
+    height: 40px; /* Sabit yükseklik */
+    border-radius: 12px; /* Diğer kutularla uyumlu olması için */
+    background: rgba(255, 255, 255, 0.05); /* Header temasına uygun şeffaflık */
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    cursor: pointer;
+    transition: all 0.3s ease;
+    padding: 0; /* İç boşluğu sıfırla */
+    flex-shrink: 0; /* Butonun ezilmesini engelle */
+}
+
+/* Hover efekti (opsiyonel) */
+.theme-btn-icon:hover {
+    background: rgba(255, 255, 255, 0.1);
+    transform: translateY(-2px);
 }
 
 /* ================= TEMA UYUMLARI ================= */
