@@ -27,6 +27,8 @@ import { bindEvents } from "./app/events.js";
 import { installSrsBridge } from "./app/srsBridge.js";
 import { createFocusHelpers } from "./app/focus.js";
 
+import { initNotesTab } from "./aiPractice/practiceUI.js";
+
 
 // js/app.js - İmza
 
@@ -345,6 +347,23 @@ bindEvents({
   listFolderBooklets,
   fetchDriveFileAsFileOrText,
 });
+
+// ================= NOTES (AI Practice) =================
+try {
+  initNotesTab({
+    state,
+    setLoading,
+    showToast,
+    showWarn,
+    applyShuffle,
+    startExam,
+    paintAll,
+    persist,
+    listMyDriveBooklets,
+    listFolderBooklets,
+    fetchDriveFileAsFileOrText,
+  });
+} catch (e) { console.error('Notes init error', e); }
 
 /* ================= INIT ================= */
 initTheme();           

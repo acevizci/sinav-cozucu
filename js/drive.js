@@ -1,9 +1,10 @@
-// js/drive.js - Google Drive API Client (Auto-Patch Version)
+// js/drive.js - Google Drive API Client (Robust & Feature Rich)
 // Uses OAuth access token provided by auth.js
 
+import { getGoogleAccessToken } from "./auth.js";
 import { showToast, setLoading } from "./ui.js";
 
-const DRIVE_API = "https://www.googleapis.com/drive/v3";
+const DRIVE_API_V3 = "https://www.googleapis.com/drive/v3";
 
 // 🔥 1. NET VE RENKLİ SVG İKONLAR
 const ICONS = {
@@ -22,22 +23,19 @@ const ICONS = {
     default: `<svg viewBox="0 0 24 24" fill="none" style="width:28px;height:28px;display:block;"><path d="M14 2H6C4.9 2 4 2.9 4 4V20C4 21.1 4.9 22 6 22H18C19.1 22 20 21.1 20 20V8L14 2Z" fill="#9E9E9E"/><path d="M14 2V8H20" fill="#E0E0E0"/></svg>`
 };
 
-// 🔥 2. İKON SEÇİCİ (Uzantı Öncelikli)
+// 🔥 2. İKON SEÇİCİ
 export function getFileIcon(mimeType, fileName = "") {
   const name = fileName ? fileName.toLowerCase() : "";
   const mime = (mimeType || "").toLowerCase();
   
-  // Önce Klasör
   if (mime.includes("folder")) return ICONS.folder;
 
-  // Sonra Dosya Uzantısı (En Kesin Yöntem)
   if (name.endsWith(".pdf")) return ICONS.pdf;
   if (name.endsWith(".docx") || name.endsWith(".doc")) return ICONS.word;
   if (name.endsWith(".xlsx") || name.endsWith(".xls") || name.endsWith(".csv")) return ICONS.excel;
   if (name.endsWith(".pptx") || name.endsWith(".ppt")) return ICONS.ppt;
   if (name.endsWith(".jpg") || name.endsWith(".jpeg") || name.endsWith(".png")) return ICONS.image;
 
-  // Sonra Mime Type (Yedek)
   if (mime.includes("pdf")) return ICONS.pdf;
   if (mime.includes("word") || mime.includes("document")) return ICONS.word;
   if (mime.includes("spreadsheet") || mime.includes("excel")) return ICONS.excel;
@@ -47,59 +45,68 @@ export function getFileIcon(mimeType, fileName = "") {
   return ICONS.default;
 }
 
-let gToken = null;
-export function setDriveToken(t) { gToken = t; }
-
-// Auth Helper
-async function authedFetch(url, { retry401=true } = {}){
-  let token = gToken || window.__GOOGLE_ACCESS_TOKEN || null;
-
-  if (!token){
-    if (!window.getGoogleAccessToken) throw new Error("Google token yok. auth.js yüklenmedi.");
-    token = await window.getGoogleAccessToken({ forcePopup: true });
+// 🔥 3. ROBUST AUTH FETCH (401 Retry Mekanizması)
+async function authedFetch(url, options = {}) {
+  // 1. Mevcut token ile dene (Sessizce)
+  let token = await getGoogleAccessToken(false); 
+  
+  if (!token) {
+    // Token yoksa kullanıcıyı dürterek (popup) al
+    token = await getGoogleAccessToken(true);
   }
 
-  let res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!token) throw new Error("Google Drive erişim izni alınamadı.");
 
-  if (res.status === 401 && retry401){
-    token = await window.getGoogleAccessToken({ forcePopup: true });
-    res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  options.headers = {
+    ...options.headers,
+    "Authorization": `Bearer ${token}`
+  };
+
+  let res = await fetch(url, options);
+
+  // 2. Eğer 401 (Yetkisiz) hatası alırsak, token süresi dolmuş olabilir.
+  if (res.status === 401) {
+    console.warn("[Drive] 401 Hatası alındı. Token yenileniyor...");
+    
+    // Token'ı ZORLA yenile (forcePopup: true mantığı auth.js içinde olmalı)
+    token = await getGoogleAccessToken(true);
+    
+    if (token) {
+      // Yeni token ile tekrar dene
+      options.headers["Authorization"] = `Bearer ${token}`;
+      res = await fetch(url, options);
+    }
   }
 
-  if (!res.ok){
-    const txt = await res.text().catch(() => "");
-    throw new Error(`Drive hata (${res.status}): ${txt || res.statusText}`);
+  // 3. Hala hata varsa fırlat
+  if (!res.ok) {
+    const errText = await res.text().catch(() => "");
+    throw new Error(`Drive API Hata (${res.status}): ${errText}`);
   }
+
   return res;
 }
 
-// 🔥 3. OTOMATİK İKON YAMASI (Auto-Patcher)
-// Bu fonksiyon events.js listeyi çizdikten SONRA çalışır ve ikonları düzeltir.
+// 🔥 4. OTOMATİK İKON YAMASI (Auto-Patcher)
 function applyIconPatch() {
     const list = document.getElementById("driveList");
     if (!list) return;
     
-    const items = list.children; // Listelenen tüm dosyalar
+    const items = list.children;
     for (let item of items) {
-        // Dosya adını bul
         const nameEl = item.querySelector(".driveX-name") || item.querySelector("[class*='name']");
         const iconEl = item.querySelector(".driveX-icon-box") || item.querySelector("[class*='icon']");
         
         if (nameEl && iconEl) {
-            // Zaten düzelttiysek atla
             if (iconEl.getAttribute("data-patched") === "true") continue;
 
             const fileName = nameEl.textContent.trim();
-            const mime = item.dataset.mime || ""; // Eğer events.js dataset'e yazıyorsa
-            
-            // Doğru ikonu bul
+            const mime = item.dataset.mime || ""; 
             const svg = getFileIcon(mime, fileName);
             
-            // İkonu değiştir
             iconEl.innerHTML = svg;
             iconEl.setAttribute("data-patched", "true");
             
-            // Görsel hizalama
             iconEl.style.display = "flex";
             iconEl.style.alignItems = "center";
             iconEl.style.justifyContent = "center";
@@ -107,7 +114,7 @@ function applyIconPatch() {
     }
 }
 
-// Gözlemciyi başlat (Sürekli takip eder)
+// Gözlemciyi başlat
 let observer = null;
 function startIconObserver() {
     if (observer) return;
@@ -117,17 +124,18 @@ function startIconObserver() {
     observer = new MutationObserver(() => {
         applyIconPatch();
     });
-    
     observer.observe(list, { childList: true, subtree: true });
-}
-
-function _statusLog(...args){
-  //console.log(...args);
 }
 
 export function parseDriveFolderId(input){
   if (!input) return null;
+  if (typeof input === "object"){
+    const cand = input.id || input.folderId || input.fileId || input.file_id;
+    if (cand) input = cand;
+    else if (input.folderLinkOrId) input = input.folderLinkOrId;
+  }
   const s = String(input).trim();
+  if (s === "root") return "root";
   const m1 = s.match(/\/folders\/([a-zA-Z0-9_-]+)/);
   if (m1) return m1[1];
   const m2 = s.match(/[?&]id=([a-zA-Z0-9_-]+)/);
@@ -149,8 +157,7 @@ function normalizeFile(f){
 
 const DEFAULT_FIELDS = "files(id,name,mimeType,modifiedTime,size,parents)";
 
-const QUERY_MIME = "(" +
-  "mimeType='application/vnd.google-apps.folder' or " +
+const QUERY_FILES = "(" +
   "mimeType='application/pdf' or " +
   "mimeType='application/vnd.google-apps.document' or " +
   "mimeType contains 'text/' or " +
@@ -159,42 +166,42 @@ const QUERY_MIME = "(" +
   "mimeType='application/msword'" +
 ")";
 
-// --- API Functions ---
+const QUERY_FOLDER_OR_FILES = "(" +
+  "mimeType='application/vnd.google-apps.folder' or " +
+  QUERY_FILES.slice(1);
 
-export async function listMyDriveBooklets({ folderLinkOrId=null, pageSize=200 } = {}){
-  let fId = null;
-  if (folderLinkOrId && typeof folderLinkOrId === 'string') fId = folderLinkOrId;
-  else if (folderLinkOrId && typeof folderLinkOrId === 'object' && folderLinkOrId.folderLinkOrId) fId = folderLinkOrId.folderLinkOrId;
-  
-  let q;
-  if (fId) {
-      q = encodeURIComponent(`'${fId}' in parents and trashed=false and ${QUERY_MIME}`);
+
+// --- EXPORTED API FUNCTIONS ---
+
+export async function listMyDriveBooklets({ folderLinkOrId="root", pageSize=200, mode="folder", queryText=null } = {}){
+  const folderId = (mode === "folder") ? parseDriveFolderId(folderLinkOrId) : null;
+  let qParts = [];
+
+  if (mode === "folder"){
+    if (!folderId) throw new Error("Klasör ID çözülemedi.");
+    qParts = [`'${folderId}' in parents`, "trashed=false", QUERY_FOLDER_OR_FILES];
   } else {
-      q = encodeURIComponent(`'root' in parents and trashed=false and ${QUERY_MIME}`);
+    qParts = ["trashed=false", QUERY_FILES];
   }
 
-  const url =
-    `${DRIVE_API}/files?q=${q}` +
-    `&pageSize=${pageSize}` +
-    `&fields=${encodeURIComponent(DEFAULT_FIELDS)}` +
-    `&orderBy=${encodeURIComponent("folder, modifiedTime desc")}` +
-    `&supportsAllDrives=true&includeItemsFromAllDrives=true`;
+  if (queryText && String(queryText).trim()){
+    const t = String(queryText).trim().replace(/'/g, "\\'");
+    qParts.push(`(name contains '${t}' or fullText contains '${t}')`);
+  }
 
-  _statusLog("GET", url);
-  
+  const q = encodeURIComponent(qParts.join(" and "));
+  const url = `${DRIVE_API_V3}/files?q=${q}&pageSize=${pageSize}&fields=${encodeURIComponent(DEFAULT_FIELDS)}&orderBy=${encodeURIComponent("modifiedTime desc")}&supportsAllDrives=true&includeItemsFromAllDrives=true`;
+
   try {
     const res = await authedFetch(url);
     const data = await res.json();
     const files = (data.files || []).map(normalizeFile);
-    
-    // UI Güncelleme (Başlık)
-    const st = document.getElementById("driveStatus");
-    if(st) st.textContent = fId ? "Klasör İçeriği" : "Drive Ana Dizin";
 
-    // 🔥 Gözlemciyi başlat ve yamayı tetikle
+    const st = document.getElementById("driveStatus");
+    if(st) st.textContent = (mode === "folder") ? "Klasör İçeriği" : "Drive Dosyaları (Tümü)";
+
+    // İkon patch işlemleri
     startIconObserver();
-    
-    // events.js render ettikten sonra çalışması için gecikmeli çağrılar
     setTimeout(applyIconPatch, 50);
     setTimeout(applyIconPatch, 150);
     setTimeout(applyIconPatch, 500);
@@ -202,7 +209,7 @@ export async function listMyDriveBooklets({ folderLinkOrId=null, pageSize=200 } 
     return files;
   } catch (e) {
     console.error("Drive list hatası:", e);
-    return [];
+    throw e; // Hatayı yukarı fırlat ki UI yakalayabilsin
   }
 }
 
@@ -216,10 +223,12 @@ export async function fetchBookletText(fileId, mimeType){
   if (!fileId) throw new Error("fileId yok");
   let url = null;
 
+  // Google Docs Export
   if (mimeType === "application/vnd.google-apps.document"){
-    url = `${DRIVE_API}/files/${encodeURIComponent(fileId)}/export?mimeType=${encodeURIComponent("text/plain")}`;
+    url = `${DRIVE_API_V3}/files/${encodeURIComponent(fileId)}/export?mimeType=${encodeURIComponent("text/plain")}`;
   } else {
-    url = `${DRIVE_API}/files/${encodeURIComponent(fileId)}?alt=media`;
+    // Binary Download
+    url = `${DRIVE_API_V3}/files/${encodeURIComponent(fileId)}?alt=media`;
   }
 
   const res = await authedFetch(url);
@@ -228,22 +237,25 @@ export async function fetchBookletText(fileId, mimeType){
 
 export async function fetchDriveFileAsFileOrText({ id, mimeType, name }){
   if (!id) throw new Error("fileId yok");
+  
+  // 1. Google Docs ise Text Export
   if (mimeType === "application/vnd.google-apps.document"){
     const text = await fetchBookletText(id, mimeType);
     return { kind: "text", text, name };
   }
 
-  const url = `${DRIVE_API}/files/${encodeURIComponent(id)}?alt=media`;
+  // 2. Diğer Dosyalar (Binary Download)
+  const url = `${DRIVE_API_V3}/files/${encodeURIComponent(id)}?alt=media`;
   const res = await authedFetch(url);
   const blob = await res.blob();
 
+  // PDF veya Word ise File objesi
   if (mimeType === "application/pdf" || mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" || mimeType === "application/msword"){
     const file = new File([blob], name || "drive_file", { type: mimeType || blob.type || "" });
     return { kind: "file", file, name };
   }
 
+  // Diğerleri text varsayılır
   const text = await blob.text();
   return { kind: "text", text, name };
 }
-
-// Not: listBooklets exportunu sildim çünkü listFolderBooklets zaten var.

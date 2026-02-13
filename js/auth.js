@@ -1,6 +1,6 @@
 // js/auth.js (module) - Firebase init + UI overlay + Google Drive OAuth token helper
-// Single source of truth for auth globals: window.auth, window.googleProvider, window.signInWithPopup
-// Keeps the rest of the app unchanged (app.js can keep using window.auth if it does).
+// Single source of truth for auth globals.
+// Supports both ES Module imports and window globals.
 
 import { initializeApp, getApps, getApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import {
@@ -22,7 +22,7 @@ const firebaseConfig = {
   measurementId: "G-9ZREWM2734"
 }; 
 
-// Init once (avoid "already exists" if index.html or other module initializes too)
+// Init once
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 const auth = getAuth(app);
 
@@ -31,13 +31,16 @@ const googleProvider = new GoogleAuthProvider();
 googleProvider.addScope("https://www.googleapis.com/auth/drive.readonly");
 googleProvider.setCustomParameters({ prompt: "consent", include_granted_scopes: "true" });
 
-// Expose globals for backward compatibility
+// --- EXPORT GLOBAL VARS (Module Support) ---
+export { auth, googleProvider, signInWithPopup, signOut };
+
+// --- WINDOW GLOBALS (Legacy Support) ---
 window.auth = auth;
 window.googleProvider = googleProvider;
 window.signInWithPopup = signInWithPopup;
 window.signOut = signOut;
 
-// ---- Drive OAuth access token cache (for Google Drive REST API) ----
+// ---- Drive OAuth access token cache ----
 const TOKEN_LS_KEY = "acumen_google_access_token";
 window.__GOOGLE_ACCESS_TOKEN = localStorage.getItem(TOKEN_LS_KEY) || null;
 
@@ -49,9 +52,8 @@ function _saveAccessToken(t) {
   else localStorage.removeItem(TOKEN_LS_KEY);
 }
 
-// Gets a Google OAuth access token with Drive scope.
-// It first tries cached token; if missing/forced, triggers a popup (user gesture required).
-window.getGoogleAccessToken = async function getGoogleAccessToken({ forcePopup = false } = {}) {
+// ✅ EXPORT EDİLEN FONKSİYON (Sorunu Çözen Kısım)
+export async function getGoogleAccessToken({ forcePopup = false } = {}) {
   if (!forcePopup && window.__GOOGLE_ACCESS_TOKEN) return window.__GOOGLE_ACCESS_TOKEN;
 
   if (__AUTH_POPUP_IN_FLIGHT) throw new Error("Login popup zaten açık.");
@@ -74,7 +76,10 @@ window.getGoogleAccessToken = async function getGoogleAccessToken({ forcePopup =
   } finally {
     __AUTH_POPUP_IN_FLIGHT = false;
   }
-};
+}
+
+// Window global olarak da erişilebilir olsun
+window.getGoogleAccessToken = getGoogleAccessToken;
 
 // --- UI wiring ---
 window.addEventListener("load", () => {
@@ -151,7 +156,6 @@ window.addEventListener("load", () => {
     } else {
       if (loginOverlay) loginOverlay.style.display = "flex";
       if (btnLogout) btnLogout.style.display = "none";
-      // also clear cached drive token on logout/state reset
       _saveAccessToken(null);
     }
   });

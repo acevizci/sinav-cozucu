@@ -5329,3 +5329,386 @@ body.sepia-mode .dropdown-item:hover { background: rgba(95, 75, 50, 0.1); }
     opacity: 0.4;
     margin-top: 10px;
 }
+
+/* =========================================
+   NOTES TAB (AI PRACTICE) - Theme-aware
+   ========================================= */
+
+#tab-notes{ display:none; }
+
+.notesLayout{
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+.notesHeader{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:10px;
+  flex-wrap:wrap;
+}
+
+.notesHeader .pill{
+  background: var(--glass);
+}
+
+.notesActions{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+}
+
+.noteRow{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:10px;
+  padding:10px 12px;
+  border-radius: 14px;
+  border:1px solid var(--stroke);
+  background: rgba(255,255,255,0.03);
+  margin-bottom: 8px;
+}
+
+.noteRow:hover{
+  background: rgba(255,255,255,0.05);
+}
+
+.noteChk{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  cursor:pointer;
+  min-width: 0;
+}
+
+.noteTitle{
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 320px;
+}
+
+.noteMeta{
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+
+.noteMeta .btn{
+  padding: 6px 10px;
+  border-radius: 10px;
+}
+
+.emptyMini{
+  padding: 14px;
+  border: 1px dashed var(--stroke);
+  border-radius: 14px;
+  background: rgba(255,255,255,0.02);
+}
+
+.emptyMini .t{ font-weight: 800; margin-bottom: 4px; }
+.emptyMini .s{ font-size: 12px; color: var(--muted); }
+
+.notesPreview{
+  width: 100%;
+  min-height: 120px;
+  max-height: 240px;
+  overflow: auto;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--stroke);
+  border-radius: 14px;
+  padding: 12px;
+  color: var(--muted);
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+
+.drivePickHint{ font-size:12px; color: var(--muted); margin-bottom:10px; }
+.drivePickList{ display:flex; flex-direction:column; gap:8px; }
+.drivePickItem{
+  width:100%;
+  text-align:left;
+  padding:10px 12px;
+  border-radius: 12px;
+  border:1px solid var(--stroke);
+  background: rgba(255,255,255,0.03);
+}
+.drivePickItem:hover{ background: rgba(255,255,255,0.06); }
+
+/* Book (sepia) mode minor tweaks */
+body.sepia-mode .noteRow{ background: rgba(91,70,54,0.06); }
+body.sepia-mode .notesPreview{ background: rgba(91,70,54,0.04); }
+.notesActions{ display:flex; gap:8px; flex-wrap:wrap; }
+.notesSplit{
+  display:grid;
+  grid-template-columns: 1fr;
+  gap:12px;
+}
+@media (min-width: 980px){
+  .notesSplit{ grid-template-columns: 1fr 1fr; }
+}
+.notesList{
+  border:1px solid var(--stroke);
+  border-radius: 14px;
+  background: rgba(255,255,255,0.02);
+  overflow:hidden;
+}
+
+/* Distribution segmented control */
+.notesDist{
+  display: inline-flex;
+  gap: 6px;
+  padding: 6px;
+  border-radius: 999px;
+  border: 1px solid var(--stroke);
+  background: rgba(255,255,255,0.02);
+}
+
+.segBtn{
+  appearance: none;
+  border: 1px solid transparent;
+  background: rgba(255,255,255,0.04);
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: 0.15s;
+}
+
+.segBtn:hover{ filter: brightness(1.08); }
+
+.segBtn.is-active{
+  color: #fff;
+  border-color: rgba(10,132,255,0.55);
+  background: rgba(10,132,255,0.18);
+  box-shadow: 0 10px 24px rgba(10,132,255,0.10);
+}
+
+/* Priority list */
+.notesPriority{
+  border: 1px solid var(--stroke);
+  border-radius: 14px;
+  background: rgba(255,255,255,0.02);
+  padding: 12px;
+  margin-bottom: 10px;
+}
+
+.notesPriorityTitle{
+  font-size: 12px;
+  font-weight: 900;
+  color: var(--text);
+  margin-bottom: 8px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.notesPriorityHint{ font-size: 11px; color: var(--muted); font-weight: 700; }
+
+.notesPriorityList{
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.prioItem{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--stroke);
+  background: rgba(255,255,255,0.03);
+}
+
+.prioItem[draggable="true"]{ cursor: grab; }
+.prioItem:active{ cursor: grabbing; }
+
+.prioLeft{ display:flex; align-items:center; gap:10px; min-width:0; }
+.prioHandle{ opacity: 0.75; font-size: 14px; }
+.prioTitle{ font-size: 12px; font-weight: 800; color: var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.prioBadge{ font-size: 11px; padding: 3px 8px; border-radius: 999px; border:1px solid var(--stroke); background: var(--glass); color: var(--muted); }
+
+.prioItem.is-dragover{
+  border-color: rgba(10,132,255,0.55);
+  box-shadow: 0 0 0 2px rgba(10,132,255,0.12) inset;
+}
+
+body.sepia-mode .notesDist{ background: rgba(91,70,54,0.05); }
+body.sepia-mode .segBtn{ background: rgba(91,70,54,0.06); }
+body.sepia-mode .notesPriority{ background: rgba(91,70,54,0.04); }
+
+
+.drivePickItem{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+}
+.drivePickBadge{
+  font-size:12px;
+  opacity:.75;
+  padding:2px 8px;
+  border:1px solid var(--stroke);
+  border-radius:999px;
+  background: var(--glass);
+}
+.drivePickItem:disabled{
+  opacity:.45;
+  cursor:not-allowed;
+}
+
+.drivePickNav{display:flex;align-items:center;gap:10px;margin-top:8px}
+.driveCrumb{font-size:12px;opacity:.75}
+.drivePickList{display:flex;flex-direction:column;gap:10px;margin-top:12px;max-height:60vh;overflow:auto}
+.drivePickItem{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.drivePickItem.isFolder .drivePickName{font-weight:700}
+.drivePickBadge{font-size:12px;opacity:.75;padding:2px 8px;border:1px solid var(--stroke);border-radius:999px;background:var(--glass)}
+.drivePickEmpty{opacity:.75;padding:14px 6px}
+
+
+/* Not satırlarını kartlaştır */
+.noteRow {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--stroke);
+  border-radius: 12px;
+  padding: 12px;
+  margin-bottom: 8px;
+  transition: transform 0.2s ease, border-color 0.2s ease;
+}
+
+.noteRow:hover {
+  transform: scale(1.02);
+  border-color: var(--accent);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* Checkbox ve Metin hizalaması */
+.noteChk {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+/* Öncelik Listesi (Drag & Drop) için Cam Efekti */
+.prioItem {
+  background: var(--glass2);
+  border: 1px solid rgba(168, 85, 247, 0.3); /* Hafif mor vurgu */
+  backdrop-filter: blur(5px);
+  margin-bottom: 6px;
+  border-radius: 10px;
+}
+
+/* --- Yöntem Seçici (Segmented Control) --- */
+.notesDist {
+    display: inline-flex;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 4px;
+    border-radius: 12px;
+    gap: 4px;
+}
+
+.segBtn {
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Aktif Buton (Mavi Parlama) */
+.segBtn.is-active {
+    background: var(--accent); /* #0A84FF */
+    color: white;
+    box-shadow: 0 0 15px rgba(10, 132, 255, 0.5);
+}
+
+/* --- Deneme Üret Butonu (Magic Style) --- */
+#btnGeneratePractice {
+    background: linear-gradient(135deg, #a855f7 0%, #7c3aed 100%);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: white;
+    font-weight: 800;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    padding: 14px;
+    border-radius: 16px;
+    box-shadow: 0 8px 24px rgba(124, 58, 237, 0.4);
+    position: relative;
+    overflow: hidden;
+    transition: all 0.3s ease;
+}
+
+#btnGeneratePractice:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 30px rgba(124, 58, 237, 0.6);
+    filter: brightness(1.1);
+}
+
+/* Butonun içindeki parıltı efekti */
+#btnGeneratePractice::before {
+    content: '';
+    position: absolute;
+    top: 0; left: -100%;
+    width: 50%; height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+    transform: skewX(-25deg);
+    animation: shineMove 3s infinite;
+}
+
+@keyframes shineMove {
+    0% { left: -100%; }
+    20% { left: 150%; }
+    100% { left: 150%; }
+}
+
+/* --- Not Satırı (İnce Dokunuş) --- */
+.noteRow {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--stroke);
+    border-radius: 14px;
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    transition: all 0.2s;
+}
+
+.noteRow:hover {
+    background: rgba(255, 255, 255, 0.07);
+    border-color: #a855f7;
+    transform: scale(1.01);
+}
+
+/* Deneme sayısı inputu için özel stil */
+.glass-input.small {
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid var(--stroke);
+    border-radius: 8px;
+    color: var(--accent);
+    font-weight: 800;
+    padding: 5px;
+}
+
+.config-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 0;
+}

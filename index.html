@@ -128,6 +128,7 @@
         <button class="nav-item active" onclick="switchTab('file', this)">📂 Dosya Yükle</button>
         <button class="nav-item" onclick="switchTab('text', this)">📋 Metin Yapıştır</button>
         <button class="nav-item" onclick="switchTab('drive', this)">☁️ Drive</button>
+        <button class="nav-item" onclick="switchTab('notes', this)">📚 Notlar</button>
       </div>
 
       <div id="tab-file" class="tab-content active">
@@ -182,6 +183,66 @@
       <button id="btnDriveOpen" class="driveX-primary" type="button">Seçileni Aç</button>
       <div class="driveX-hint">PDF’ler <b>Şablon Stüdyosu</b> ile açılır.</div>
     </div>
+  </div>
+</div>
+
+<div id="tab-notes" class="tab-content" style="display:none;">
+  <div class="panel-left-inner">
+    
+    <div class="tools-grid-compact">
+      <button id="btnAddNotePaste" class="tool-chip"><span>+</span> Metin</button>
+      <button id="btnAddNoteFile" class="tool-chip"><span>+</span> Dosya</button>
+      <button id="btnAddNoteDrive" class="tool-chip"><span>+</span> Drive</button>
+    </div>
+
+    <div class="divider-line"></div>
+
+    <div class="list-section">
+      <div class="between" style="margin-bottom: 8px;">
+        <span class="sec-title">Kütüphanem (<span id="notesSelCount">0</span>)</span>
+        <div class="row" style="gap:10px;">
+          <button id="btnNotesSelectAll" class="text-link">Tümünü Seç</button>
+          <button id="btnNotesClearSel" class="text-link warn">Temizle</button>
+        </div>
+      </div>
+      <div id="notesList" class="notesList" style="max-height: 200px; overflow-y: auto;"></div>
+    </div>
+
+    <div id="historySection" class="list-section" style="margin-top: 15px; border-top: 1px dashed var(--stroke); padding-top: 12px; display: none;">
+      <div class="between" style="margin-bottom: 8px;">
+        <span class="sec-title">💾 Üretilen Denemeler</span>
+        <span id="historyCount" class="badge" style="font-size: 10px;">0 Kayıt</span>
+      </div>
+      <div id="practiceHistoryList" class="notesList" style="max-height: 150px; overflow-y: auto;">
+        </div>
+    </div>
+
+    <div id="notesActionArea" class="config-section" style="margin-top: auto; display: none;">
+      <div class="config-row">
+        <label class="config-label">Yöntem</label>
+        <div class="notesDist">
+            <button id="btnDistBalanced" class="segBtn is-active">Dengeli</button>
+            <button id="btnDistPriority" class="segBtn">Öncelikli</button>
+        </div>
+      </div>
+
+      <div class="config-row" style="margin-top: 8px;">
+        <label class="config-label">Kaç Deneme?</label>
+        <div class="row" style="gap:8px;">
+          <input id="practiceAttemptNo" type="number" min="1" max="10" value="1" class="glass-input small" style="width: 70px; text-align: center;">
+          <span style="font-size: 11px; color: var(--muted); font-weight: 600;">versiyon</span>
+        </div>
+      </div>
+
+      <div id="notesPriorityWrap" class="notesPriority" style="display:none; margin: 12px 0;">
+        <div id="notesPriorityList" class="notesPriorityList"></div>
+      </div>
+
+      <button id="btnGeneratePractice" class="btn-hero primary" style="width: 100%; margin-top: 10px;">
+        ✨ DENEME ÜRET
+      </button>
+    </div>
+
   </div>
 </div>
 
@@ -397,10 +458,12 @@
     const file = document.getElementById('tab-file');
     const text = document.getElementById('tab-text');
     const drive = document.getElementById('tab-drive');
+    const notes = document.getElementById('tab-notes');
 
     if (file) file.style.display = (tab === 'file') ? 'block' : 'none';
     if (text) text.style.display = (tab === 'text') ? 'block' : 'none';
     if (drive) drive.style.display = (tab === 'drive') ? 'block' : 'none';
+    if (notes) notes.style.display = (tab === 'notes') ? 'block' : 'none';
   }
 
   // File input label update (existing behavior)
@@ -425,33 +488,30 @@
   }
 </script>
 
-  <div id="summaryModal" class="modalOverlay" style="display:none;" aria-hidden="true">
-  <div class="modalCard" role="dialog" aria-modal="true">
+<div id="summaryModal" class="modalOverlay" style="display:none;">
+  
+  <div class="modalCard" role="dialog" aria-modal="true" aria-labelledby="summaryTitle">
 
     <div class="modalTop">
       <div>
         <div id="summaryTitle" class="modalTitle">📊 Sınav Karnesi</div>
         <div id="summarySub" class="modalSub">Performans analizi</div>
       </div>
-      <button id="btnCloseSummary" class="modalClose">✕</button>
+      <button id="btnCloseSummary" class="modalClose" aria-label="Kapat">✕</button>
     </div>
 
-    <!-- ✅ Konu Analizi: Buton + Panel + Tek Canvas -->
     <div class="divider"></div>
 
     <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px;">
-      <div class="modalSub" style="margin:0;">📊 Konu Bazlı Hata Analizi</div>
-
-      <!-- ✅ AI konu tamamlama butonu: en optimal yer -->
-      <button id="btnAiSubjects" class="g-btn" style="width:auto;">
+      <div class="modalSub" style="margin:0; font-weight:600; color:var(--text-main);">📊 Konu Bazlı Hata Analizi</div>
+      <button id="btnAiSubjects" class="g-btn" style="width:auto; font-size:11px; padding: 4px 10px;">
         🤖 AI ile Konuları Tamamla
       </button>
     </div>
 
-    <!-- ✅ Progress + sayaçlar + öneri listesi mount alanı -->
     <div id="aiSubjectPanelMount"></div>
 
-    <div id="subjectAnalysisWrap" style="display:block; width: 100%;">
+    <div id="subjectAnalysisWrap" style="display:block; width: 100%; margin-bottom: 15px;">
       <div style="height: 180px; width: 100%; position: relative;">
         <canvas id="subjectChart"></canvas>
       </div>
@@ -476,7 +536,7 @@
       </div>
     </div>
 
-    <div class="summaryActions">
+    <div class="summaryActions" style="margin-top: 15px;">
       <div style="display:flex; gap:10px;">
         <button id="btnRetryWrongs" class="warn" style="font-size:12px; display:none;">♻ Hataları Tekrarla</button>
         <button id="btnReviewWrongs" class="bad" style="font-size:12px; display:none;">🔍 İncele</button>
@@ -530,15 +590,16 @@
   <button id="btnExitFocus" class="ghost">Çık</button>
 </div>
 
-<div id="resumeModal" class="modalOverlay" style="display:none;" aria-hidden="true">
-  <div class="modalCard" role="dialog" aria-modal="true">
+<div id="resumeModal" class="modalOverlay" style="display:none;">
+  <div class="modalCard" role="dialog" aria-modal="true" aria-labelledby="resumeTitle">
     <div class="modalTop">
       <div>
         <div id="resumeTitle" class="modalTitle">⏯ Kaldığın yerden devam?</div>
-        <div id="resumeSub" class="modalSub">Daha önce yarım kalan bir sınav bulundu.</div>
+        <div class="modalSub">Daha önce yarım kalan bir sınav bulundu.</div>
       </div>
       <button id="btnCloseResume" class="modalClose">✕</button>
     </div>
+    <div class="divider"></div>
     <div class="modalActions" style="justify-content:space-between;">
       <button id="btnDiscardResume" class="bad">Sıfırla</button>
       <button id="btnResume" class="primary">Devam et</button>

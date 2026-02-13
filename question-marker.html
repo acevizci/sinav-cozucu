@@ -4,290 +4,20 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ACUMEN Studio | Akıllı Şablon Oluşturucu</title>
+  <link rel="icon" href="data:,">
 
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 
-  <style>
-    :root{
-      --bg:#050508;
-      --glass:rgba(255,255,255,0.03);
-      --glass-heavy:rgba(255,255,255,0.08);
-      --accent:#a855f7;
-      --accent-glow:rgba(168,85,247,0.40);
-      --text:#f4f4f5;
-      --muted:#a1a1aa;
-      --stroke:rgba(255,255,255,0.10);
+  <link rel="stylesheet" href="./ss.css">
 
-      --shadow-strong: 0 30px 60px rgba(0,0,0,0.50);
-      --shadow-soft: 0 14px 35px rgba(0,0,0,0.32);
-      --blur: 20px;
-    }
+<script>
+  // ACUMEN_STUDIO_UX_PLACEHOLDER
+  window.ACUMEN_STUDIO_UX = window.ACUMEN_STUDIO_UX || {};
+</script>
 
-    *{ box-sizing:border-box; -webkit-font-smoothing:antialiased; }
-    html, body { height:100%; }
-
-    body{
-      margin:0; padding:0;
-      font-family:'Inter', sans-serif;
-      background:
-        radial-gradient(700px 520px at 10% 10%, rgba(99,102,241,0.20), transparent 60%),
-        radial-gradient(650px 520px at 90% 20%, rgba(168,85,247,0.22), transparent 62%),
-        radial-gradient(720px 540px at 55% 95%, rgba(34,197,94,0.12), transparent 65%),
-        radial-gradient(circle at 0% 0%, #1e1b4b 0%, var(--bg) 50%);
-      color:var(--text);
-      display:flex; flex-direction:column;
-      overflow:hidden;
-    }
-
-    header{
-      padding:12px 18px;
-      display:flex; justify-content:space-between; align-items:center; gap:12px;
-      background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0)) , rgba(0,0,0,0.28);
-      backdrop-filter: blur(var(--blur));
-      -webkit-backdrop-filter: blur(var(--blur));
-      border-bottom: 1px solid var(--stroke);
-      z-index:100;
-      position:relative;
-    }
-
-    .logo-area h1{
-      font-size:18px; font-weight:800; margin:0; letter-spacing:1px; color:#fff;
-      user-select:none;
-    }
-
-    .header-group{ display:flex; align-items:center; gap:10px; }
-
-    main{
-      display:grid; grid-template-columns: 1fr 360px;
-      flex:1; overflow:hidden;
-      position:relative;
-      z-index:1;
-    }
-
-    #pdfWrapper{
-      position:relative;
-      background: rgba(0,0,0,0.38);
-      overflow:auto;
-      display:flex; justify-content:center; align-items:center;
-      padding:40px;
-      scrollbar-color: rgba(255,255,255,0.2) transparent;
-    }
-
-    #canvasContainer{
-      position:relative;
-      box-shadow: var(--shadow-strong);
-      cursor: crosshair;
-      background:white;
-      border-radius: 10px;
-      overflow:hidden;
-    }
-
-    /* overlay layer for question rectangles */
-    #overlayLayer{
-      position:absolute;
-      inset:0;
-      pointer-events:auto; /* interactivity for move/resize; drawing routed via container */
-      z-index: 9;
-    }
-
-    .q-rect{
-      position:absolute;
-      border: 2px solid rgba(168,85,247,0.95);
-      background: rgba(168,85,247,0.14);
-      border-radius: 10px;
-      box-shadow: 0 10px 22px rgba(0,0,0,0.18);
-    }
-    .q-rect .label{
-      position:absolute;
-      left:8px; top:6px;
-      font-size:11px;
-      font-weight:800;
-      padding:4px 8px;
-      border-radius: 999px;
-      color:white;
-      background: rgba(15, 23, 42, 0.65);
-      border: 1px solid rgba(255,255,255,0.18);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
-      box-shadow: 0 10px 22px rgba(0,0,0,0.18);
-    }
-    .handle{
-      position:absolute;
-      width: 12px;
-      height: 12px;
-      border-radius: 6px;
-      background: rgba(255,255,255,0.85);
-      border: 1px solid rgba(15,23,42,0.55);
-      box-shadow: 0 10px 18px rgba(0,0,0,0.22);
-      pointer-events: auto;
-    }
-    /* positions */
-    .handle-nw{ left:-7px; top:-7px; cursor:nwse-resize; }
-    .handle-n { left:calc(50% - 6px); top:-7px; cursor:ns-resize; }
-    .handle-ne{ right:-7px; top:-7px; cursor:nesw-resize; }
-    .handle-e { right:-7px; top:calc(50% - 6px); cursor:ew-resize; }
-    .handle-se{ right:-7px; bottom:-7px; cursor:nwse-resize; }
-    .handle-s { left:calc(50% - 6px); bottom:-7px; cursor:ns-resize; }
-    .handle-sw{ left:-7px; bottom:-7px; cursor:nesw-resize; }
-    .handle-w { left:-7px; top:calc(50% - 6px); cursor:ew-resize; }
-
-    .q-rect.highlight{
-      border-color: rgba(6,182,212,0.95);
-      background: rgba(6,182,212,0.14);
-      box-shadow: 0 0 0 1px rgba(6,182,212,0.18) inset, 0 20px 40px rgba(6,182,212,0.14);
-    }
-
-    #sidebar{
-      background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0)) , var(--glass);
-      backdrop-filter: blur(40px);
-      -webkit-backdrop-filter: blur(40px);
-      border-left: 1px solid var(--stroke);
-      display:flex; flex-direction:column;
-      padding:20px; gap:15px;
-    }
-
-    .glass-card{
-      background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0)) , var(--glass-heavy);
-      border: 1px solid var(--stroke);
-      border-radius: 16px;
-      padding: 16px;
-      box-shadow: var(--shadow-soft);
-      backdrop-filter: blur(18px);
-      -webkit-backdrop-filter: blur(18px);
-    }
-
-    .section-title{
-      font-size: 11px; font-weight: 800; color: var(--accent);
-      text-transform: uppercase; letter-spacing: 1px;
-      margin-bottom: 12px;
-      display:flex; align-items:center; gap:8px;
-      user-select:none;
-    }
-
-    #qList{
-      flex:1;
-      overflow-y:auto;
-      display:flex;
-      flex-direction:column;
-      gap:10px;
-      padding-right:5px;
-    }
-
-    .q-item{
-      background: rgba(255,255,255,0.03);
-      border:1px solid var(--stroke);
-      border-radius:12px;
-      padding:12px;
-      display:flex; align-items:center; justify-content:space-between;
-      transition: 0.15s;
-      cursor:pointer;
-    }
-    .q-item:hover{
-      border-color: rgba(168,85,247,0.55);
-      background: rgba(255,255,255,0.06);
-      transform: translateY(-1px);
-    }
-    .q-item.active{
-      border-color: rgba(6,182,212,0.65);
-      background: rgba(6,182,212,0.10);
-    }
-
-    .btn{
-      border-radius: 10px;
-      border: 1px solid transparent;
-      font-weight: 700;
-      padding: 10px 15px;
-      cursor: pointer;
-      display:flex; align-items:center; justify-content:center; gap:8px;
-      transition: 0.16s;
-      font-size: 13px;
-      user-select:none;
-      position:relative;
-      background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0)) , rgba(51,65,85,0.35);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
-      box-shadow: 0 10px 22px rgba(0,0,0,0.22);
-      color: var(--text);
-    }
-    .btn:hover{ transform: translateY(-1px); filter: brightness(1.05); }
-    .btn:active{ transform: translateY(0px) scale(0.99); }
-
-    .btn.primary{
-      background: linear-gradient(180deg, rgba(168,85,247,1), rgba(168,85,247,0.70));
-      border-color: rgba(168,85,247,0.35);
-      color:white;
-      width:100%;
-      box-shadow: 0 16px 36px rgba(168,85,247,0.20), 0 0 0 1px rgba(168,85,247,0.12) inset;
-    }
-    .btn.primary:hover{
-      box-shadow: 0 18px 45px rgba(168,85,247,0.26), 0 0 0 1px rgba(168,85,247,0.18) inset;
-    }
-
-    .btn.ghost{
-      background: rgba(255,255,255,0.03);
-      border: 1px solid rgba(255,255,255,0.12);
-      color: var(--text);
-      padding: 10px 12px;
-    }
-    .btn.ghost:hover{
-      border-color: rgba(168,85,247,0.45);
-      box-shadow: 0 14px 30px rgba(168,85,247,0.10);
-    }
-
-    .btn.icon{
-      padding: 9px;
-      width: 40px;
-      height: 38px;
-    }
-
-    #selectionRect{
-      position:absolute;
-      border: 2px solid rgba(6,182,212,0.95);
-      background: rgba(6,182,212,0.18);
-      display:none;
-      pointer-events:none;
-      z-index: 10;
-      border-radius: 10px;
-      box-shadow: 0 10px 22px rgba(0,0,0,0.18);
-    }
-
-    
-    .empty-state{
-      align-self: center;
-      width: min(720px, 92%);
-      margin: 80px auto;
-      text-align: center;
-    }
-/* toast */
-    #toast{
-      position: fixed;
-      right: 16px;
-      top: 70px;
-      z-index: 9999;
-      min-width: 240px;
-      max-width: 340px;
-      padding: 12px 14px;
-      border-radius: 14px;
-      color: var(--text);
-      background: rgba(15,23,42,0.65);
-      border: 1px solid rgba(255,255,255,0.16);
-      backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
-      box-shadow: 0 18px 45px rgba(0,0,0,0.40);
-      display: none;
-      font-size: 13px;
-      line-height: 1.35;
-    }
-    #toast .t-title{ font-weight: 800; margin-bottom: 2px; }
-    #toast .t-msg{ color: rgba(244,244,245,0.92); }
-
-    /* scrollbars (webkit) */
-    #qList::-webkit-scrollbar, #pdfWrapper::-webkit-scrollbar { width: 10px; height: 10px; }
-    #qList::-webkit-scrollbar-thumb, #pdfWrapper::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.14); border-radius: 999px; }
-    #qList::-webkit-scrollbar-track, #pdfWrapper::-webkit-scrollbar-track { background: transparent; }
-  </style>
 </head>
 <body>
 
@@ -297,53 +27,77 @@
   </div>
 
   <div class="header-group" id="pageControls" style="display:none;">
-    <button class="btn ghost icon" onclick="changePage(-1)" title="Önceki Sayfa">
+        <button class="btn primary" onclick="fileInp.click()">
+          <span class="material-icons-round">upload_file</span> Kaynak Yükle
+        </button>
+
+    <button class="btn ghost icon" onclick="window.ACUMEN_STUDIO_UX?.openShortcuts?.()" title="Önceki Sayfa">
       <span class="material-icons-round">navigate_before</span>
     </button>
     <span id="pageInfo" style="font-weight:600; min-width:110px; text-align:center;">Sayfa 1 / 1</span>
-    <button class="btn ghost icon" onclick="changePage(1)" title="Sonraki Sayfa">
+    <button class="btn ghost icon" onclick="window.ACUMEN_STUDIO_UX?.openShortcuts?.()" title="Sonraki Sayfa">
       <span class="material-icons-round">navigate_next</span>
     </button>
 
     <div style="width:1px; height:26px; background: rgba(255,255,255,0.12); margin:0 4px;"></div>
 
-    <button class="btn ghost icon" onclick="zoomBy(-0.15)" title="Yakınlaştır (-)">
+    <button class="btn ghost icon" onclick="window.ACUMEN_STUDIO_UX?.openShortcuts?.()" title="Yakınlaştır (-)">
       <span class="material-icons-round">remove</span>
     </button>
     <span id="zoomInfo" style="font-weight:700; min-width:62px; text-align:center;">100%</span>
-    <button class="btn ghost icon" onclick="zoomBy(0.15)" title="Yakınlaştır (+)">
+    <button class="btn ghost icon" onclick="window.ACUMEN_STUDIO_UX?.openShortcuts?.()" title="Yakınlaştır (+)">
       <span class="material-icons-round">add</span>
     </button>
-    <button class="btn ghost" onclick="resetZoom()" title="Zoom Sıfırla" style="height:38px;">%100</button>
+    <button class="btn ghost" onclick="window.ACUMEN_STUDIO_UX?.openShortcuts?.()" title="Zoom Sıfırla" style="height:38px;">%100</button>
   </div>
 
   <div class="header-group">
-    <button class="btn ghost" onclick="document.getElementById('fileInp').click()">
-      <span class="material-icons-round">upload_file</span> PDF YÜKLE
-    </button>
-    <input type="file" id="fileInp" accept=".pdf" style="display:none">
+<input type="file" id="fileInp" accept="application/pdf,image/png,image/jpeg,image/webp" style="display:none">
   </div>
+
+<div style="font-size:11px; color:rgba(244,244,245,0.65); margin-top:4px; text-align:right;">PDF • JPG • PNG • WEBP</div>
 </header>
 
 <main>
   <div id="pdfWrapper">
-    <div id="emptyState" class="empty-state glass-card">
-      <div class="section-title" style="justify-content:center; margin-bottom:10px;">
-        <span class="material-icons-round" style="font-size:16px">auto_awesome</span> Hazırız
-      </div>
-      <div style="font-size:13px; color:rgba(244,244,245,0.88); line-height:1.55; text-align:center;">
-        PDF yükleyince işaretleme ekranı burada açılacak.<br>
-        <span style="color:var(--muted);">İpucu:</span> Kutu çiz → liste → aktar.
-      </div>
-      <div style="display:flex; gap:10px; justify-content:center; margin-top:14px; flex-wrap:wrap;">
-        <button class="btn primary" style="width:auto; padding:10px 16px;" onclick="document.getElementById('fileInp').click()">
-          <span class="material-icons-round">upload_file</span> PDF Yükle
-        </button>
-        <button class="btn ghost" style="width:auto; padding:10px 14px;" onclick="toast('Kısayol', 'Ctrl+Wheel: zoom • Ctrl+Z: undo • Esc: iptal', 2600)">
-          <span class="material-icons-round">tips_and_updates</span> Kısayollar
-        </button>
-      </div>
-    </div>
+<div id="emptyState" class="empty-state glass-card">
+
+  <div class="section-title" style="justify-content:center; margin-bottom:10px;">
+    <span class="material-icons-round" style="font-size:16px">auto_awesome</span>
+    Hazırız
+  </div>
+
+  <div style="font-size:13px; color:rgba(244,244,245,0.88); line-height:1.3; text-align:center;">
+    PDF veya resim (JPG/PNG/WEBP) yükleyince işaretleme ekranı burada açılacak.<br>
+    <span style="color:var(--muted);">İpucu:</span> Kutu çiz → liste → aktar.
+  </div>
+
+  <!-- BUTTON AREA -->
+  <div style="display:flex; justify-content:center; margin-top:14px;">
+    <button class="btn primary"
+            style="width:auto; padding:10px 18px;"
+            onclick="fileInp.click()">
+      <span class="material-icons-round">upload_file</span>
+      Kaynak Yükle
+    </button>
+  </div>
+
+  <div id="emptyFormatsHint"
+       style="margin-top:8px; font-size:11px; color:var(--muted); text-align:center;">
+    Desteklenen: PDF • JPG • PNG • WEBP
+  </div>
+
+  <div style="display:flex; gap:10px; justify-content:center; margin-top:12px; flex-wrap:wrap;">
+    <button class="btn ghost"
+            style="width:auto; padding:10px 14px;"
+            onclick="window.ACUMEN_STUDIO_UX?.openShortcuts?.()">
+      <span class="material-icons-round">tips_and_updates</span>
+      Kısayollar
+    </button>
+  </div>
+
+</div>
+
     <div id="canvasContainer" style="display:none;">
       <canvas id="pdfCanvas"></canvas>
       <div id="overlayLayer"></div>
@@ -376,6 +130,17 @@
       <div style="font-size:12px; color:var(--muted); margin-top:10px; line-height:1.35;">
         Not: Cevap anahtarı boş gider; ana uygulamada AI ile oluşturulabilir.
       </div>
+
+      <div id="ocrBox" style="display:none; margin-top:12px;">
+        <div class="section-title" style="margin-bottom:8px;">
+          <span class="material-icons-round" style="font-size:14px;">auto_fix_high</span> OCR
+        </div>
+        <div style="font-size:12px; color:rgba(244,244,245,0.88); line-height:1.4;" id="ocrStatus">Hazırlanıyor…</div>
+        <div class="progress" aria-label="OCR Progress">
+          <div id="ocrBar"></div>
+        </div>
+      </div>
+
     </div>
   </aside>
 </main>
@@ -383,704 +148,21 @@
 <div id="toast"><div class="t-title"></div><div class="t-msg"></div></div>
 
 <script type="module">
-  // =======================
-  // HELPER
-  // =======================
-  const normalizeText = (t) => String(t ?? "")
-    .replace(/\r\n/g,"\n")
-    .replace(/\r/g,"\n")
-    .replace(/\u00A0/g," ")
-    .replace(/[ \t]+\n/g,"\n")
-    .replace(/\n{3,}/g,"\n\n")
-    .trim();
-
-  // ✅ Şık ayrıştırma: A) / A. / A- / A:  ... (multiline destekli)
-  function splitStemAndOptions(fullText){
-    const raw = normalizeText(fullText || "");
-    if (!raw) return { stem: "", options: {} };
-
-    const prepared = raw
-      .replace(/\s+([A-Ea-e])\s*[\)\.:\-]\s+/g, "\n$1) ")
-      .replace(/\n{3,}/g, "\n\n")
-      .trim();
-
-    const optRe = /(^|\n)\s*([A-Ea-e])\s*[\)\.:\-]\s*/g;
-    const hits = [];
-    let m;
-    while ((m = optRe.exec(prepared)) !== null) {
-      hits.push({
-        idx: m.index + (m[1] ? m[1].length : 0),
-        letter: m[2].toUpperCase(),
-        matchLen: m[0].length - (m[1] ? m[1].length : 0)
-      });
+  // ACUMEN Studio loader (supports multiple base paths)
+  (async () => {
+    const candidates = [
+      "./sinav-v2/js/studio/main.js",
+      "./js/studio/main.js",
+      "./studio/main.js"
+    ];
+    let lastErr = null;
+    for (const p of candidates) {
+      try { await import(p); return; }
+      catch (e) { lastErr = e; }
     }
-
-    if (hits.length < 2) {
-      return { stem: prepared.trim(), options: {} };
-    }
-
-    const first = hits[0];
-    const stem = prepared.slice(0, first.idx).trim();
-
-    const options = {};
-    for (let i = 0; i < hits.length; i++) {
-      const cur = hits[i];
-      const next = hits[i+1];
-      const start = cur.idx + cur.matchLen;
-      const end = next ? next.idx : prepared.length;
-      const val = prepared.slice(start, end).trim();
-      if (val) options[cur.letter] = val;
-    }
-
-    return { stem, options };
-  }
-
-  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-
-  function toast(title, msg, ms=2400){
-    const el = document.getElementById('toast');
-    if (!el) return;
-    el.querySelector('.t-title').textContent = title || '';
-    el.querySelector('.t-msg').textContent = msg || '';
-    el.style.display = 'block';
-    el.style.opacity = '1';
-    if (el._t) clearTimeout(el._t);
-    el._t = setTimeout(() => {
-      el.style.opacity = '0';
-      setTimeout(() => { el.style.display = 'none'; }, 220);
-    }, ms);
-  }
-
-  function downloadJson(filename, data){
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-  }
-
-  function getSafeOrigin(){
-    try {
-      if (document.referrer) return new URL(document.referrer).origin;
-    } catch {}
-    return window.location.origin;
-  }
-
-  // =======================
-  // PARSER (studio içinde minimal extract)
-  // =======================
-  async function extractFromPdfDoc(pdfDoc, questionsList) {
-    const byPage = new Map();
-    for (const q of questionsList) {
-      if (!byPage.has(q.page)) byPage.set(q.page, []);
-      byPage.get(q.page).push(q);
-    }
-
-    const extractedByNumber = new Map();
-    for (const [pageNo, pageQuestions] of byPage.entries()) {
-      const page = await pdfDoc.getPage(pageNo);
-      const viewport = page.getViewport({ scale: 1.0 });
-      const textContent = await page.getTextContent({ includeMarkedContent: true, disableCombineTextItems: false });
-
-      const items = textContent.items.map(it => {
-        const tx = pdfjsLib.Util.transform(viewport.transform, it.transform);
-        // PDF.js bbox bazen kayar -> min padding + daha güvenli height
-        const w = Math.abs(it.width || 0);
-        const h = Math.abs(it.height || tx[3] || 0);
-
-        const left = tx[4];
-        const top  = tx[5];
-
-        return {
-          str: it.str,
-          bbox: {
-            left: left - 1,
-            top: top - 1,
-            right: left + w + 2,
-            bottom: top + h + 2
-          }
-        };
-      }).filter(it => it.str && it.str.trim());
-
-      for (const q of pageQuestions) {
-        // q coords are stored in PDF coords (scale 1.0)
-        const pad = 1.5;
-        const sel = { left: q.x - pad, top: q.y - pad, right: q.x + q.w + pad, bottom: q.y + q.h + pad };
-        const inBox = items.filter(obj => !(obj.bbox.left > sel.right || obj.bbox.right < sel.left || obj.bbox.top > sel.bottom || obj.bbox.bottom < sel.top));
-
-        inBox.sort((a,b) => (Math.abs(a.bbox.top - b.bbox.top) > 5) ? a.bbox.top - b.bbox.top : a.bbox.left - b.bbox.left);
-        const fullText = normalizeText(inBox.map(i => i.str).join(" "));
-
-        extractedByNumber.set(q.number, (() => {
-          const parsed = splitStemAndOptions(fullText);
-          const stem = (parsed.stem || "").trim() || "...";
-          const opt = parsed.options || {};
-
-          const letters = ["A","B","C","D","E"];
-          const optionsByLetter = {};
-          for (const L of letters){
-            optionsByLetter[L] = { id: L, text: (opt[L] || "").trim() };
-          }
-
-          return {
-            n: q.number,
-            origN: q.number,
-            text: stem,
-            subject: "Genel",
-            optionsByLetter
-          };
-        })());
-      }
-    }
-
-    return {
-      title: "Studio Sınavı",
-      questions: Array.from(extractedByNumber.values()),
-      answerKey: {},
-      keyCount: 0,
-      meta: { format: "template-studio" }
-    };
-  }
-
-  // =======================
-  // APP STATE
-  // =======================
-  let pdfDocInstance = null;
-  let currentPage = 1;
-  let questions = []; // {number,page,x,y,w,h,correct}
-  let isDrawing = false;
-  let startX = 0, startY = 0;
-  let currentRect = null;
-  let pointerId = null;
-  let scale = 1.0;
-  const SCALE_MIN = 0.85, SCALE_MAX = 2.8;
-
-  let highlightQ = null;
-
-  const canvas = document.getElementById('pdfCanvas');
-  const ctx = canvas.getContext('2d');
-  const selectionRect = document.getElementById('selectionRect');
-  const overlayLayer = document.getElementById('overlayLayer');
-  const pdfWrapper = document.getElementById('pdfWrapper');
-
-  // undo stack (store question numbers in order of creation)
-  const undoStack = [];
-
-  function updateZoomUI(){
-    const z = document.getElementById('zoomInfo');
-    if (z) z.textContent = Math.round(scale * 100) + "%";
-  }
-
-  // =======================
-  // FILE LOAD
-  // =======================
-  document.getElementById('fileInp').onchange = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    try {
-      toast("PDF", "Yükleniyor…");
-      const arrayBuffer = await file.arrayBuffer();
-      pdfDocInstance = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-
-      // ✅ PDF yüklendiğinde zoom %100
-      scale = 1.0;
-      updateZoomUI();
-
-      document.getElementById('pageControls').style.display = 'flex';
-      currentPage = 1;
-      questions = [];
-      undoStack.length = 0;
-      highlightQ = null;
-
-      // ✅ boş ekranı kapat, canvas'ı aç
-      const empty = document.getElementById('emptyState');
-      const cont = document.getElementById('canvasContainer');
-      if (empty) empty.style.display = 'none';
-      if (cont) cont.style.display = 'block';
-
-      // ✅ scroll reset (açılışta ortadan başlamasın)
-      try { pdfWrapper.scrollTop = 0; pdfWrapper.scrollLeft = 0; } catch {}
-
-      await renderPage(currentPage);
-
-      toast("PDF", "Hazır. Kutu çizerek soruları işaretle.");
-    } catch (err) {
-      alert("PDF yüklenemedi: " + err.message);
-    }
-  };
-
-  // =======================
-  // RENDER
-  // =======================
-  async function renderPage(num) {
-    if (!pdfDocInstance) return;
-    const page = await pdfDocInstance.getPage(num);
-    const viewport = page.getViewport({ scale });
-
-    canvas.width = viewport.width;
-    canvas.height = viewport.height;
-
-    // keep container sized to canvas
-    overlayLayer.style.width = viewport.width + "px";
-    overlayLayer.style.height = viewport.height + "px";
-
-    await page.render({ canvasContext: ctx, viewport }).promise;
-
-    document.getElementById('pageInfo').textContent = `Sayfa ${num} / ${pdfDocInstance.numPages}`;
-    updateQuestionList();
-    renderOverlays();
-  }
-
-  function renderOverlays(){
-    if (!overlayLayer) return;
-    overlayLayer.innerHTML = "";
-    const pageQs = questions.filter(q => q.page === currentPage);
-
-    for (const q of pageQs) {
-      const el = document.createElement('div');
-      el.className = 'q-rect' + (highlightQ === q.number ? ' highlight' : '');
-      el.setAttribute('data-qrect', String(q.number));
-      el.style.left = (q.x * scale) + 'px';
-      el.style.top = (q.y * scale) + 'px';
-      el.style.width = (q.w * scale) + 'px';
-      el.style.height = (q.h * scale) + 'px';
-
-      const lab = document.createElement('div');
-      lab.className = 'label';
-      lab.textContent = `#${q.number}`;
-      el.appendChild(lab);
-
-      // ✅ Seçili kutu: resize handle'ları göster
-      if (highlightQ === q.number) {
-        const handles = ["nw","n","ne","e","se","s","sw","w"];
-        for (const h of handles) {
-          const hd = document.createElement('div');
-          hd.className = 'handle handle-' + h;
-          hd.setAttribute('data-handle', h);
-          hd.setAttribute('data-qnum', String(q.number));
-          el.appendChild(hd);
-        }
-      }
-
-      overlayLayer.appendChild(el);
-    }
-  }
-
-
-  // expose page control funcs to window
-  window.changePage = async (dir) => {
-    if (!pdfDocInstance) return;
-    currentPage = clamp(currentPage + dir, 1, pdfDocInstance.numPages);
-    highlightQ = null;
-    await renderPage(currentPage);
-  };
-
-  window.zoomBy = async (delta) => {
-    if (!pdfDocInstance) return;
-    const old = scale;
-    scale = clamp(scale + delta, SCALE_MIN, SCALE_MAX);
-    if (Math.abs(scale - old) < 0.001) return;
-    updateZoomUI();
-    await renderPage(currentPage);
-  };
-
-  window.resetZoom = async () => {
-    if (!pdfDocInstance) return;
-    scale = 1.0;
-    updateZoomUI();
-    await renderPage(currentPage);
-  };
-
-  // Ctrl+Wheel zoom
-  pdfWrapper.addEventListener('wheel', async (e) => {
-    if (!pdfDocInstance) return;
-    if (!e.ctrlKey) return;
-    e.preventDefault();
-    const dir = e.deltaY > 0 ? -1 : 1;
-    await window.zoomBy(dir * 0.12);
-  }, { passive: false });
-
-  // =======================
-  // DRAWING + EDITING ENGINE (Pointer Events + Capture)
-  // - Boş alana sürükle: yeni kutu
-  // - Kutuyu tıkla: seç + vurgula
-  // - Kutuyu sürükle: taşı
-  // - Handle sürükle: resize
-  // - Snap/Grid: px bazlı (pro hissi)
-  // =======================
-  const canvasContainer = document.getElementById('canvasContainer');
-
-  const GRID_PX = 6;          // ✅ snap grid
-  const MIN_W_PX = 32;
-  const MIN_H_PX = 22;
-
-  function snapPx(v){ return Math.round(v / GRID_PX) * GRID_PX; }
-
-  function pointInCanvasFromClient(e){
-    const rect = canvas.getBoundingClientRect();
-    return {
-      x: clamp(e.clientX - rect.left, 0, canvas.width),
-      y: clamp(e.clientY - rect.top, 0, canvas.height)
-    };
-  }
-
-  // --- Editing state ---
-  let activePointerId = null;
-  let opMode = null; // "draw" | "move" | "resize"
-  let resizeHandle = null; // "nw n ne e se s sw w"
-  let dragStart = null; // {x,y} screen px
-  let rectStart = null; // {x,y,w,h} screen px
-  let activeQ = null;   // number
-
-  function qToScreen(q){
-    return { x: q.x * scale, y: q.y * scale, w: q.w * scale, h: q.h * scale };
-  }
-  function screenToQ(r){
-    return { x: r.x / scale, y: r.y / scale, w: r.w / scale, h: r.h / scale };
-  }
-
-  function pickRectTarget(target){
-    const h = target.closest?.('[data-handle]');
-    if (h) return { type:"handle", qnum: parseInt(h.getAttribute('data-qnum'),10), handle: h.getAttribute('data-handle') };
-
-    const r = target.closest?.('[data-qrect]');
-    if (r) return { type:"rect", qnum: parseInt(r.getAttribute('data-qrect'),10) };
-
-    return null;
-  }
-
-  function ensureBounds(r){
-    r.w = clamp(r.w, MIN_W_PX, canvas.width);
-    r.h = clamp(r.h, MIN_H_PX, canvas.height);
-    r.x = clamp(r.x, 0, canvas.width - r.w);
-    r.y = clamp(r.y, 0, canvas.height - r.h);
-    return r;
-  }
-
-  function applyResize(handle, startRect, dx, dy){
-    let {x,y,w,h} = startRect;
-
-    if (handle.includes('e')) w = w + dx;
-    if (handle.includes('s')) h = h + dy;
-    if (handle.includes('w')) { x = x + dx; w = w - dx; }
-    if (handle.includes('n')) { y = y + dy; h = h - dy; }
-
-    // min size with anchor correction
-    if (w < MIN_W_PX) {
-      const diff = MIN_W_PX - w;
-      if (handle.includes('w')) x -= diff;
-      w = MIN_W_PX;
-    }
-    if (h < MIN_H_PX) {
-      const diff = MIN_H_PX - h;
-      if (handle.includes('n')) y -= diff;
-      h = MIN_H_PX;
-    }
-
-    // snap
-    x = snapPx(x); y = snapPx(y); w = snapPx(w); h = snapPx(h);
-
-    return ensureBounds({x,y,w,h});
-  }
-
-  function showSelection(r){
-    selectionRect.style.display = 'block';
-    selectionRect.style.left = r.x + 'px';
-    selectionRect.style.top = r.y + 'px';
-    selectionRect.style.width = r.w + 'px';
-    selectionRect.style.height = r.h + 'px';
-  }
-  function hideSelection(){ selectionRect.style.display = 'none'; }
-
-  function cancelOp(silent=false){
-    opMode = null;
-    resizeHandle = null;
-    isDrawing = false;
-    currentRect = null;
-    activePointerId = null;
-    dragStart = null;
-    rectStart = null;
-    activeQ = null;
-    hideSelection();
-    if (!silent) toast("İptal", "Çizim iptal edildi.", 1400);
-  }
-
-  function selectQuestion(n){
-    activeQ = n;
-    highlightQ = n;
-    updateQuestionList();
-    renderOverlays();
-  }
-
-  async function finalizeNewRect(){
-    if (!currentRect) return;
-    if (currentRect.w <= 30 || currentRect.h <= 20) { cancelOp(true); return; }
-
-    const num = questions.length + 1;
-    const q = {
-      number: num,
-      page: currentPage,
-      ...screenToQ(currentRect),
-      correct: null
-    };
-
-    questions.push(q);
-    undoStack.push(num);
-    selectQuestion(num);
-
-    toast("Eklendi", `Soru ${num} işaretlendi.`, 1400);
-    cancelOp(true);
-  }
-
-  function commitEdit(screenRect){
-    const q = questions.find(x => x.number === activeQ);
-    if (!q) return;
-    const r = ensureBounds(screenRect);
-    const upd = screenToQ(r);
-    q.x = upd.x; q.y = upd.y; q.w = upd.w; q.h = upd.h;
-    renderOverlays();
-  }
-
-  canvasContainer.addEventListener('pointerdown', (e) => {
-    if (!pdfDocInstance) return;
-    if (e.button !== 0) return;
-
-    const picked = pickRectTarget(e.target);
-
-    activePointerId = e.pointerId;
-    canvasContainer.setPointerCapture(activePointerId);
-
-    const p = pointInCanvasFromClient(e);
-
-    // rect/handle edit mode
-    if (picked && typeof picked.qnum === 'number') {
-      const q = questions.find(x => x.number === picked.qnum);
-      if (!q) return;
-
-      selectQuestion(q.number);
-      rectStart = qToScreen(q);
-      dragStart = { x: p.x, y: p.y };
-      opMode = (picked.type === "handle") ? "resize" : "move";
-      resizeHandle = (picked.type === "handle") ? picked.handle : null;
-      hideSelection();
-      return;
-    }
-
-    // start drawing
-    opMode = "draw";
-    isDrawing = true;
-    startX = p.x; startY = p.y;
-
-    const sx = snapPx(startX);
-    const sy = snapPx(startY);
-    currentRect = { x: sx, y: sy, w: 0, h: 0 };
-    showSelection(currentRect);
-    // clicking empty area de-select
-    highlightQ = null;
-    updateQuestionList();
-    renderOverlays();
-  });
-
-  canvasContainer.addEventListener('pointermove', (e) => {
-    if (activePointerId === null || e.pointerId !== activePointerId) return;
-
-    const p = pointInCanvasFromClient(e);
-
-    if (opMode === "draw" && isDrawing) {
-      const curX = p.x, curY = p.y;
-      const x1 = snapPx(Math.min(startX, curX));
-      const y1 = snapPx(Math.min(startY, curY));
-      const x2 = snapPx(Math.max(startX, curX));
-      const y2 = snapPx(Math.max(startY, curY));
-
-      currentRect = ensureBounds({ x: x1, y: y1, w: Math.max(0, x2-x1), h: Math.max(0, y2-y1) });
-      showSelection(currentRect);
-      return;
-    }
-
-    if ((opMode === "move" || opMode === "resize") && activeQ && rectStart && dragStart) {
-      const dx = p.x - dragStart.x;
-      const dy = p.y - dragStart.y;
-
-      if (opMode === "move") {
-        const nx = snapPx(rectStart.x + dx);
-        const ny = snapPx(rectStart.y + dy);
-        commitEdit({ x: nx, y: ny, w: rectStart.w, h: rectStart.h });
-      } else if (opMode === "resize") {
-        const next = applyResize(resizeHandle, rectStart, dx, dy);
-        commitEdit(next);
-      }
-      return;
-    }
-  });
-
-  canvasContainer.addEventListener('pointerup', async (e) => {
-    if (activePointerId === null || e.pointerId !== activePointerId) return;
-
-    try { canvasContainer.releasePointerCapture(activePointerId); } catch {}
-    activePointerId = null;
-
-    if (opMode === "draw") {
-      isDrawing = false;
-      await finalizeNewRect();
-      return;
-    }
-
-    // finish edit
-    opMode = null;
-    resizeHandle = null;
-    dragStart = null;
-    rectStart = null;
-    activeQ = null;
-  });
-
-  canvasContainer.addEventListener('pointercancel', () => cancelOp(true));
-
-  // Esc cancel
-  function cancelDrawing(){
-    if (opMode === "draw" && isDrawing) cancelOp(false);
-  }
-
-
-  // =======================
-  // LIST / NAV
-  // =======================
-  function updateQuestionList(){
-    const list = document.getElementById('qList');
-    if (!list) return;
-
-    if (!questions.length) {
-      list.innerHTML = `
-        <div class="glass-card" style="box-shadow:none; background: rgba(255,255,255,0.04);">
-          <div class="section-title" style="margin-bottom:8px;">
-            <span class="material-icons-round" style="font-size:14px">playlist_add</span> Sorular
-          </div>
-          <div style="font-size:12px; color:var(--muted); line-height:1.4;">
-            Henüz soru işaretlemedin. PDF üzerinde kutu çizerek başlayabilirsin.
-          </div>
-        </div>
-      `;
-      return;
-    }
-
-    list.innerHTML = questions.map(q => `
-      <div class="q-item ${highlightQ === q.number ? 'active' : ''}" onclick="goToQuestion(${q.number})" title="Tıkla: sayfaya git & vurgula">
-        <div style="font-size:13px;">
-          <b>Soru ${q.number}</b>
-          <span style="opacity:0.65; font-size:11px;">(Sayfa ${q.page})</span>
-        </div>
-        <button class="btn ghost icon" style="width:36px; height:34px; padding:0;" onclick="event.stopPropagation(); removeQuestion(${q.number});" title="Sil">
-          <span class="material-icons-round" style="font-size:18px;">delete</span>
-        </button>
-      </div>
-    `).join('');
-  }
-
-  window.goToQuestion = async (n) => {
-    const q = questions.find(x => x.number === n);
-    if (!q || !pdfDocInstance) return;
-    highlightQ = n;
-
-    if (currentPage !== q.page) {
-      currentPage = q.page;
-      await renderPage(currentPage);
-    } else {
-      updateQuestionList();
-      renderOverlays();
-    }
-
-    // scroll into view
-    const targetY = (q.y * scale) - 40;
-    pdfWrapper.scrollTo({ top: clamp(targetY, 0, pdfWrapper.scrollHeight), behavior: 'smooth' });
-
-    toast("Vurgu", `Soru ${n} gösteriliyor.`, 1200);
-  };
-
-  window.removeQuestion = (n) => {
-    questions = questions.filter(q => q.number !== n);
-    // re-number
-    questions = questions.map((q, i) => ({ ...q, number: i+1 }));
-
-    // rebuild undo stack (keep last order but renumbered)
-    undoStack.length = 0;
-    for (const q of questions) undoStack.push(q.number);
-
-    highlightQ = null;
-    updateQuestionList();
-    renderOverlays();
-    toast("Silindi", `Soru ${n} silindi.`, 1400);
-  };
-
-  // =======================
-  // UNDO + ESC
-  // =======================
-  function undoLast(){
-    if (!questions.length) return;
-    const last = questions[questions.length - 1];
-    questions.pop();
-    undoStack.pop();
-    highlightQ = questions.length ? questions[questions.length - 1].number : null;
-    updateQuestionList();
-    renderOverlays();
-    toast("Geri alındı", `Soru ${last.number} kaldırıldı.`, 1400);
-  }
-
-  window.addEventListener('keydown', (e) => {
-    // ESC cancel drawing
-    if (e.key === "Escape") {
-      if (isDrawing) cancelDrawing();
-      return;
-    }
-
-    // Ctrl+Z undo
-    if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === "z")) {
-      e.preventDefault();
-      undoLast();
-      return;
-    }
-  });
-
-  // =======================
-  // EXPORT (safe postMessage + json fallback)
-  // =======================
-  window.exportToApp = async () => {
-    if (!questions.length) {
-      alert("Lütfen en az bir soru işaretleyin.");
-      return;
-    }
-
-    try {
-      toast("Aktarım", "Metinler çıkarılıyor…");
-      const finalData = await extractFromPdfDoc(pdfDocInstance, questions);
-
-      const origin = getSafeOrigin();
-
-      if (window.opener && typeof window.opener.postMessage === "function") {
-        try {
-          window.opener.postMessage({ type: 'ACUMEN_EXAM_DATA', payload: finalData }, origin);
-          toast("Aktarım", "Ana uygulamaya gönderildi. Kapatıyorum…", 1800);
-          setTimeout(() => window.close(), 900);
-          return;
-        } catch (e) {
-          // fall through to download
-        }
-      }
-
-      // opener yok / gönderilemedi -> download
-      downloadJson("acumen_exam_data.json", finalData);
-      toast("Aktarım", "Pencere bağlantısı yok. JSON indirildi.", 2600);
-    } catch (err) {
-      alert("Hata: " + err.message);
-    }
-  };
-
-  // initial UI state
-  updateZoomUI();
-  updateQuestionList();
+    console.error("ACUMEN Studio: main.js bulunamadı. Denenen yollar:", candidates, lastErr);
+    alert("Studio JS bulunamadı. Dosya yolu hatalı: " + candidates.join(" | "));
+  })();
 </script>
 
 
@@ -1130,6 +212,56 @@
   });
 })();
 </script>
+
+
+  <!-- Shortcuts Modal -->
+  <div id="shortcutsBackdrop" class="acumen-modal-backdrop" style="display:none;">
+    <div class="acumen-modal" role="dialog" aria-modal="true" aria-label="Kısayollar">
+      <div class="acumen-modal-head">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span class="material-icons-round" style="font-size:18px;">keyboard</span>
+          <div>
+            <div style="font-weight:700; letter-spacing:0.2px;">Kısayollar</div>
+            <div style="font-size:12px; color:var(--muted); margin-top:2px;">Hızlı işaretleme için</div>
+          </div>
+        </div>
+        <button class="btn ghost icon" style="width:38px; height:34px; padding:0;" onclick="window.ACUMEN_STUDIO_UX?.closeShortcuts?.()" aria-label="Kapat">
+          <span class="material-icons-round" style="font-size:18px;">close</span>
+        </button>
+      </div>
+
+      <div class="acumen-modal-body">
+        <div class="acumen-kbd-grid">
+          <div class="acumen-kbd-row">
+            <div class="acumen-kbd"><span>Ctrl</span> <span>+</span> <span>Z</span></div>
+            <div class="acumen-kbd-desc">Geri al (son kutuyu kaldırır)</div>
+          </div>
+          <div class="acumen-kbd-row">
+            <div class="acumen-kbd"><span>Esc</span></div>
+            <div class="acumen-kbd-desc">Çizimi iptal et</div>
+          </div>
+          <div class="acumen-kbd-row">
+            <div class="acumen-kbd"><span>Ctrl</span> <span>+</span> <span>Wheel</span></div>
+            <div class="acumen-kbd-desc">Yakınlaştır / Uzaklaştır</div>
+          </div>
+          <div class="acumen-kbd-row">
+            <div class="acumen-kbd"><span>Click</span></div>
+            <div class="acumen-kbd-desc">Kutuyu seç (taşı / yeniden boyutla)</div>
+          </div>
+        </div>
+
+        <div style="margin-top:14px; font-size:12px; color:var(--muted); line-height:1.4;">
+          İpucu: Soru listesinden bir soruya tıklayınca otomatik odaklanır.
+        </div>
+      </div>
+
+      <div class="acumen-modal-foot">
+        <button class="btn primary" onclick="window.ACUMEN_STUDIO_UX?.closeShortcuts?.()">
+          <span class="material-icons-round" style="font-size:18px;">done</span> Tamam
+        </button>
+      </div>
+    </div>
+  </div>
 
 </body>
 </html>

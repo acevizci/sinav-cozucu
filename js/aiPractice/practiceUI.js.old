@@ -1,0 +1,645 @@
+// js/aiPractice/practiceUI.js
+// Notes Tab UI + Multi-select + AI Practice Generation
+
+import { normalizeText } from "../utils.js";
+import { readFileAsText } from "../parser.js";
+import { listNotes, upsertNote, removeNote, renameNote, makeSelectionHash } from "./notesStore.js";
+import { getNextAttempt, setNextAttempt, recordAttempt, getPreviousHints } from "./practiceHistoryStore.js";
+import { buildSourcesFromNotes, computeBalancedAllocation, computePriorityAllocation } from "./multiSourceMerge.js";
+import { generatePracticeOnServer as generatePractice } from "./practiceGenerator.js";
+import { toParsedExam } from "./practiceAdapter.js";
+import { validateParsedExam } from "./practiceValidator.js";
+
+const DEFAULT_SETTINGS = {
+  questionCount: 20,
+  choices: 5,
+  difficulty: "mixed",
+  distribution: "balanced",
+  language: "tr",
+};
+
+function createNoteRow(note, selectedIds){
+  const li = document.createElement("div");
+  li.className = "noteRow";
+  li.dataset.id = note.id;
+
+  const checked = selectedIds.has(note.id);
+
+  li.innerHTML = `
+    <label class="noteChk">
+      <input type="checkbox" ${checked ? "checked" : ""} />
+      <span class="noteTitle">${escapeHtml(note.title)}</span>
+    </label>
+    <div class="noteMeta">
+      <span class="badge">${escapeHtml(note.source || "local")}</span>
+      <button class="btn ghost noteRename" title="Yeniden adlandır">✎</button>
+      <button class="btn ghost noteDelete" title="Sil">🗑</button>
+    </div>
+  `;
+
+  return li;
+}
+
+function escapeHtml(s){
+  return String(s ?? "").replace(/[&<>"']/g, (ch) => ({
+    "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"
+  }[ch]));
+}
+
+function showModal({ title, bodyHtml, onOk, okText="Kaydet", cancelText="İptal" }){
+  const overlay = document.createElement("div");
+  overlay.className = "modalOverlay";
+  overlay.innerHTML = `
+    <div class="modalCard" role="dialog" aria-modal="true">
+      <div class="modalTop">
+        <div>
+          <div class="modalTitle">${escapeHtml(title)}</div>
+          <div class="modalSub">Ders Notları</div>
+        </div>
+        <button class="modalClose">✕</button>
+      </div>
+      <div class="divider"></div>
+      <div class="modalBody">${bodyHtml}</div>
+      <div class="modalActions">
+        <button class="ghost btnCancel">${escapeHtml(cancelText)}</button>
+        <button class="primary btnOk">${escapeHtml(okText)}</button>
+      </div>
+    </div>
+  `;
+
+  function close(){
+    try { overlay.remove(); } catch {}
+  }
+
+  overlay.querySelector(".modalClose")?.addEventListener("click", close);
+  overlay.querySelector(".btnCancel")?.addEventListener("click", close);
+  overlay.addEventListener("click", (e)=>{ if (e.target === overlay) close(); });
+
+  overlay.querySelector(".btnOk")?.addEventListener("click", async ()=>{
+    try {
+      await onOk?.(overlay);
+      close();
+    } catch (err) {
+      console.error(err);
+      const box = overlay.querySelector(".modalBody");
+      if (box){
+        const warn = document.createElement("div");
+        warn.className = "warnBox";
+        warn.style.display = "block";
+        warn.textContent = err?.message || "Hata";
+        box.prepend(warn);
+      }
+    }
+  });
+
+  document.body.appendChild(overlay);
+  return overlay;
+}
+
+function getSelectedNotes(selectedIds){
+  const all = listNotes();
+  return all.filter(n => selectedIds.has(n.id));
+}
+
+export function initNotesTab(ctx){
+  const state = ctx.state;
+  const setLoading = ctx.setLoading;
+  const showToast = ctx.showToast;
+  const showWarn = ctx.showWarn;
+  const applyShuffle = ctx.applyShuffle;
+  const paintAll = ctx.paintAll;
+  const persist = ctx.persist;
+  const startExam = ctx.startExam;
+
+  // drive deps
+  const listMyDriveBooklets = ctx.listMyDriveBooklets;
+  const listFolderBooklets = ctx.listFolderBooklets;
+  const fetchDriveFileAsFileOrText = ctx.fetchDriveFileAsFileOrText;
+
+  const tab = document.getElementById("tab-notes");
+  if (!tab) return;
+
+  const listHost = document.getElementById("notesList");
+  const selCount = document.getElementById("notesSelCount");
+  const preview = document.getElementById("notesPreview");
+  const btnGen = document.getElementById("btnGeneratePractice");
+  const btnAddPaste = document.getElementById("btnAddNotePaste");
+  const btnAddFile = document.getElementById("btnAddNoteFile");
+  const btnAddDrive = document.getElementById("btnAddNoteDrive");
+  const btnSelectAll = document.getElementById("btnNotesSelectAll");
+  const btnClearSel = document.getElementById("btnNotesClearSel");
+  const inpAttempt = document.getElementById("practiceAttemptNo");
+
+  // distribution controls
+  const btnDistBalanced = document.getElementById("btnDistBalanced");
+  const btnDistPriority = document.getElementById("btnDistPriority");
+  const prioWrap = document.getElementById("notesPriorityWrap");
+  const prioList = document.getElementById("notesPriorityList");
+
+  let distribution = "balanced"; // balanced | priority
+  let selectedOrder = []; // ordered note IDs for priority mode
+  let dragId = null;
+
+  const selectedIds = new Set();
+
+  function syncSelectedOrder(){
+    // keep existing order, append new selections, drop removed
+    const next = [];
+    for (const id of selectedOrder){ if (selectedIds.has(id)) next.push(id); }
+    for (const id of selectedIds){ if (!next.includes(id)) next.push(id); }
+    selectedOrder = next;
+  }
+
+  function getSelectedNotesOrdered(){
+    const all = listNotes();
+    const byId = new Map(all.map(n => [n.id, n]));
+    // prefer selectedOrder if populated
+    const ids = selectedOrder.length ? selectedOrder : Array.from(selectedIds);
+    return ids.map(id => byId.get(id)).filter(Boolean);
+  }
+
+  function renderPriorityList(){
+    if (!prioWrap || !prioList) return;
+    const sel = getSelectedNotesOrdered();
+    const show = distribution === "priority" && sel.length > 1;
+    prioWrap.style.display = show ? "block" : "none";
+    if (!show){ prioList.innerHTML = ""; return; }
+
+    prioList.innerHTML = "";
+    sel.forEach((n, idx) => {
+      const item = document.createElement("div");
+      item.className = "prioItem";
+      item.draggable = true;
+      item.dataset.id = n.id;
+      item.innerHTML = `
+        <div class="prioLeft">
+          <span class="prioHandle">⋮⋮</span>
+          <span class="prioTitle">${escapeHtml(n.title)}</span>
+        </div>
+        <span class="prioBadge">${idx + 1}</span>
+      `;
+
+      item.addEventListener("dragstart", (e) => {
+        dragId = n.id;
+        try { e.dataTransfer.effectAllowed = "move"; } catch {}
+      });
+      item.addEventListener("dragend", () => {
+        dragId = null;
+        prioList.querySelectorAll(".prioItem").forEach(el => el.classList.remove("is-dragover"));
+      });
+      item.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        item.classList.add("is-dragover");
+      });
+      item.addEventListener("dragleave", () => {
+        item.classList.remove("is-dragover");
+      });
+      item.addEventListener("drop", (e) => {
+        e.preventDefault();
+        item.classList.remove("is-dragover");
+        const targetId = item.dataset.id;
+        if (!dragId || !targetId || dragId === targetId) return;
+
+        const cur = selectedOrder.slice();
+        const from = cur.indexOf(dragId);
+        const to = cur.indexOf(targetId);
+        if (from < 0 || to < 0) return;
+        cur.splice(from, 1);
+        cur.splice(to, 0, dragId);
+        selectedOrder = cur;
+        refresh();
+      });
+
+      prioList.appendChild(item);
+    });
+  }
+
+  function refresh(){
+    syncSelectedOrder();
+    const notes = listNotes();
+    if (listHost){
+      listHost.innerHTML = "";
+      if (notes.length === 0){
+        listHost.innerHTML = `
+          <div class="emptyMini">
+            <div class="t">Henüz not yok</div>
+            <div class="s">Metin, dosya veya Drive üzerinden not ekleyebilirsin.</div>
+          </div>`;
+      } else {
+        for (const n of notes){
+          const row = createNoteRow(n, selectedIds);
+          listHost.appendChild(row);
+        }
+      }
+    }
+
+    const count = selectedIds.size;
+    if (selCount) selCount.textContent = String(count);
+
+    // Auto attempt no based on current selection
+    try {
+      if (inpAttempt){
+        if (count === 0) inpAttempt.value = "1";
+        else {
+          const selectionHash = makeSelectionHash(Array.from(selectedIds));
+          inpAttempt.value = String(getNextAttempt(selectionHash));
+        }
+      }
+    } catch (e) { console.error(e); }
+
+    // preview
+    if (preview){
+      const sel = getSelectedNotesOrdered();
+      if (sel.length === 0){
+        preview.textContent = "Seçili not yok.";
+      } else {
+        const joined = sel.map(n => `=== ${n.title} ===\n${(n.text||"").slice(0, 1200)}`).join("\n\n");
+        preview.textContent = joined.slice(0, 4000);
+      }
+    }
+
+    renderPriorityList();
+
+    if (btnGen) btnGen.disabled = selectedIds.size === 0;
+  }
+
+  function bindListEvents(){
+    if (!listHost) return;
+    listHost.addEventListener("click", async (e)=>{
+      const row = e.target?.closest?.(".noteRow");
+      if (!row) return;
+      const id = row.dataset.id;
+
+      if (e.target?.classList?.contains("noteDelete")){
+        removeNote(id);
+        selectedIds.delete(id);
+        refresh();
+        return;
+      }
+
+      if (e.target?.classList?.contains("noteRename")){
+        const note = listNotes().find(n => n.id === id);
+        showModal({
+          title: "Notu Yeniden Adlandır",
+          bodyHtml: `<div class="inp-group"><label>Başlık</label><input id="renameTitle" value="${escapeHtml(note?.title||"")}" /></div>`,
+          onOk: (ov)=>{
+            const val = ov.querySelector("#renameTitle")?.value;
+            renameNote(id, val);
+            refresh();
+          }
+        });
+        return;
+      }
+
+      // checkbox toggle
+      const chk = row.querySelector('input[type="checkbox"]');
+      if (e.target === chk){
+        if (chk.checked) selectedIds.add(id);
+        else selectedIds.delete(id);
+        refresh();
+      }
+    });
+
+    // also handle checkbox changes (keyboard)
+    listHost.addEventListener("change", (e)=>{
+      const row = e.target?.closest?.(".noteRow");
+      if (!row) return;
+      if (e.target?.matches?.('input[type="checkbox"]')){
+        const id = row.dataset.id;
+        if (e.target.checked) selectedIds.add(id);
+        else selectedIds.delete(id);
+        refresh();
+      }
+    });
+  }
+
+  async function addNoteFromPaste(){
+    showModal({
+      title: "Metinden Not Ekle",
+      okText: "Notu Kaydet",
+      bodyHtml: `
+        <div class="inp-group" style="margin-bottom:10px;">
+          <label>Başlık</label>
+          <input id="noteTitle" placeholder="Örn: Fizik - Kuvvet" />
+        </div>
+        <div class="inp-group">
+          <label>İçerik</label>
+          <textarea id="noteText" placeholder="Ders notunu buraya yapıştır..."></textarea>
+        </div>
+      `,
+      onOk: (ov)=>{
+        const title = ov.querySelector("#noteTitle")?.value;
+        const text = ov.querySelector("#noteText")?.value;
+        if (!text || String(text).trim().length < 80) throw new Error("Not çok kısa. Biraz daha içerik ekle.");
+        const note = upsertNote({ title, text, source: "paste" });
+        selectedIds.add(note.id);
+        refresh();
+      }
+    });
+  }
+
+  async function addNoteFromFile(){
+    const inp = document.createElement("input");
+    inp.type = "file";
+    inp.accept = ".txt,.pdf,.docx,.md";
+    inp.style.display = "none";
+    document.body.appendChild(inp);
+
+    inp.addEventListener("change", async ()=>{
+      const f = inp.files?.[0];
+      if (!f){ inp.remove(); return; }
+      try {
+        setLoading?.(true, "Not okunuyor…");
+        const text = await readFileAsText(f);
+        const note = upsertNote({ title: f.name, text, source: "file" });
+        selectedIds.add(note.id);
+        showToast?.({ title:"Not", msg:"Dosya notlara eklendi", kind:"ok" });
+      } catch (err){
+        console.error(err);
+        showWarn?.(err?.message || "Dosya okunamadı");
+      } finally {
+        setLoading?.(false);
+        inp.remove();
+        refresh();
+      }
+    });
+
+    inp.click();
+  }
+
+async function addNoteFromDrive(){
+  if (typeof listMyDriveBooklets !== "function" || typeof fetchDriveFileAsFileOrText !== "function"){
+    showWarn?.("Drive entegrasyonu bulunamadı");
+    return;
+  }
+
+  const pickable = (mt="") => (
+    mt === "application/pdf" ||
+    mt === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+    mt === "application/msword" ||
+    (mt||"").startsWith("text/") ||
+    mt === "application/vnd.google-apps.document" ||
+    mt === "application/vnd.google-apps.spreadsheet" ||
+    mt === "application/vnd.google-apps.presentation"
+  );
+
+  const isFolder = (mt="") => mt === "application/vnd.google-apps.folder";
+
+  const labelOf = (mt="") => {
+    if (isFolder(mt)) return "KLASÖR";
+    if (mt === "application/pdf") return "PDF";
+    if (mt === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") return "DOCX";
+    if (mt === "application/msword") return "DOC";
+    if ((mt||"").startsWith("text/")) return "TXT";
+    if (mt === "application/vnd.google-apps.document") return "G.DOC";
+    if (mt === "application/vnd.google-apps.spreadsheet") return "G.SHEET";
+    if (mt === "application/vnd.google-apps.presentation") return "G.SLIDE";
+    return "FILE";
+  };
+
+  const bodyHtml = `
+    <div class="drivePickTop">
+      <div class="drivePickHint">Önce bir <b>klasör</b> seç, sonra içinden dosya seç (PDF/DOCX/DOC/TXT veya Google Doc)</div>
+      <div class="drivePickNav">
+        <button class="btn sm" id="driveUp" disabled>⬅︎ Geri</button>
+        <div class="driveCrumb" id="driveCrumb">Root</div>
+      </div>
+    </div>
+    <div class="drivePickList" id="drivePickList"></div>
+  `;
+
+  const ov = showModal({
+    title: "Drive'dan Not Ekle",
+    okText: "Kapat",
+    cancelText: "Kapat",
+    bodyHtml,
+    onOk: async ()=>{}
+  });
+
+  const elList = ov.querySelector("#drivePickList");
+  const elUp = ov.querySelector("#driveUp");
+  const elCrumb = ov.querySelector("#driveCrumb");
+
+  const stack = []; // [{id,name}]
+  let currentFolderId = "root";
+
+  function renderCrumb(){
+    elCrumb.textContent = stack.length ? ("Root / " + stack.map(x=>x.name).join(" / ")) : "Root";
+    elUp.disabled = stack.length === 0;
+  }
+
+  async function loadFolder(folderId){
+    setLoading?.(true, "Drive klasörü yükleniyor…");
+    try{
+      currentFolderId = folderId || "root";
+
+      // 🔥 KRİTİK: Parametresiz çağırma yok! (yoksa global dosya arama moduna düşer)
+      let items = await listMyDriveBooklets({ folderLinkOrId: currentFolderId });
+
+      // folder + pickable dosyalar
+      items = (items || []).filter(it => isFolder(it?.mimeType) || pickable(it?.mimeType));
+
+      // folderlar üstte
+      items.sort((a,b)=>{
+        const af = isFolder(a?.mimeType) ? 0 : 1;
+        const bf = isFolder(b?.mimeType) ? 0 : 1;
+        if (af !== bf) return af - bf;
+        return String(a?.name||"").localeCompare(String(b?.name||""), "tr");
+      });
+
+      if (!items.length){
+        elList.innerHTML = `<div class="drivePickEmpty">Bu klasörde uygun dosya yok.</div>`;
+        return;
+      }
+
+      elList.innerHTML = items.map(it => {
+        const id = it?.id || it?.fileId || it?.file_id;
+        const name = it?.name || it?.title || "Drive";
+        const mt = it?.mimeType || "";
+        return `
+          <button class="drivePickItem ${isFolder(mt) ? "isFolder":""}"
+            data-id="${escapeHtml(id)}"
+            data-name="${escapeHtml(name)}"
+            data-mime="${escapeHtml(mt)}">
+            <span class="drivePickName">${escapeHtml(name)}</span>
+            <span class="drivePickBadge">${escapeHtml(labelOf(mt))}</span>
+          </button>
+        `;
+      }).join("");
+
+      elList.querySelectorAll(".drivePickItem").forEach(btn=>{
+        btn.addEventListener("click", async ()=>{
+          const id = btn.dataset.id;
+          const mt = btn.dataset.mime || "";
+          const name = btn.dataset.name || btn.textContent.trim();
+
+          // 📁 klasörse içeri gir
+          if (isFolder(mt)){
+            stack.push({ id, name });
+            renderCrumb();
+            await loadFolder(id);
+            return;
+          }
+
+          // 📄 dosyaysa not olarak ekle
+          try{
+            setLoading?.(true, "Drive dosyası okunuyor…");
+            const res = await fetchDriveFileAsFileOrText({ id, mimeType: mt, name });
+
+            let text = "";
+            if (res?.kind === "text" && typeof res.text === "string") text = res.text;
+            else if (res?.kind === "file" && res.file) text = await readFileAsText(res.file);
+            else if (typeof res === "string") text = res;
+            else if (res && typeof res.text === "function") text = await res.text();
+            else if (res?.text) text = res.text;
+
+            if (!text || String(text).trim().length < 80)
+              throw new Error("Drive içeriği alınamadı veya çok kısa.");
+
+            const note = upsertNote({
+              title: name,
+              text,
+              source: "drive",
+              driveMeta: { id, mimeType: mt }
+            });
+
+            selectedIds.add(note.id);
+            showToast?.({ title:"Drive", msg:"Not eklendi", kind:"ok" });
+            refresh();
+          } catch(err){
+            console.error(err);
+            showWarn?.(err?.message || "Drive not eklenemedi");
+          } finally {
+            setLoading?.(false);
+          }
+        });
+      });
+    } catch (e){
+      console.error(e);
+      showWarn?.(e?.message || "Drive listesi alınamadı");
+      elList.innerHTML = `<div class="drivePickEmpty">Drive listesi alınamadı.</div>`;
+    } finally {
+      setLoading?.(false);
+    }
+  }
+
+  elUp.addEventListener("click", async ()=>{
+    stack.pop();
+    renderCrumb();
+    const parentId = stack.length ? stack[stack.length - 1].id : "root";
+    await loadFolder(parentId);
+  });
+
+  renderCrumb();
+  await loadFolder("root");
+}
+
+
+
+  async function generateSelectedPractice(){
+    const sel = getSelectedNotesOrdered();
+    const sources = buildSourcesFromNotes(sel);
+    if (sources.length === 0){
+      showWarn?.("Seçili notlarda yeterli içerik yok.");
+      return;
+    }
+
+    const selIds = Array.from(selectedIds);
+    const selectionHash = makeSelectionHash(selIds);
+
+    // Attempt number: auto = next attempt for this selection
+    let attemptNo = Number(inpAttempt?.value || 0) || 0;
+    if (!attemptNo || attemptNo < 1){
+      attemptNo = getNextAttempt(selectionHash);
+      if (inpAttempt) inpAttempt.value = String(attemptNo);
+    }
+
+    // distribution hint for backend
+    const alloc = (distribution === "priority")
+      ? computePriorityAllocation(DEFAULT_SETTINGS.questionCount, sources.length)
+      : computeBalancedAllocation(DEFAULT_SETTINGS.questionCount, sources.length);
+
+    const settings = { ...DEFAULT_SETTINGS, distribution, allocation: alloc };
+
+    try {
+      setLoading?.(true, `Deneme ${attemptNo} üretiliyor…`);
+      const previous = getPreviousHints(selectionHash);
+      const resp = await generatePractice({ sources, attemptNo, settings, previous });
+      const parsed = toParsedExam(resp, { fallbackTitle: `Deneme ${attemptNo}` });
+      validateParsedExam(parsed);
+
+      // shuffle according to current state settings
+      const finalParsed = (typeof applyShuffle === "function")
+        ? applyShuffle(parsed, { shuffleQ: !!state.shuffleQ, shuffleO: !!state.shuffleO })
+        : parsed;
+
+      finalParsed.meta = finalParsed.meta || {};
+      finalParsed.meta.isAiGenerated = true;
+      finalParsed.meta.selectionHash = selectionHash;
+      finalParsed.meta.attemptNo = attemptNo;
+      finalParsed.meta.sourceIds = sources.map(s=>s.id);
+      finalParsed.meta.sourceTitles = sources.map(s=>s.title);
+      finalParsed.meta.distribution = distribution;
+      finalParsed.meta.orderedSourceIds = sources.map(s=>s.id);
+      finalParsed.meta.keySource = finalParsed.meta.keySource || "ai";
+
+      state.parsed = finalParsed;
+      state.rawText = "";
+      state.mode = "prep";
+      state.answers?.clear?.();
+
+      paintAll?.();
+      persist?.();
+
+      // Record attempt for repeat-avoidance (Deneme 2/3/4)
+      try {
+        recordAttempt(selectionHash, attemptNo, finalParsed);
+        setNextAttempt(selectionHash, attemptNo + 1);
+        if (inpAttempt) inpAttempt.value = String(attemptNo + 1);
+      } catch (e) { console.error(e); }
+
+      // ✅ AUTO-START: Deneme üretimi biter bitmez sınav akışına geç
+      try { startExam?.(); } catch (e) { console.error(e); }
+      showToast?.({ title:"AI", msg:`Deneme ${attemptNo} hazır. Başlatıldı.`, kind:"ok" });
+    } catch (err){
+      console.error(err);
+      showWarn?.(err?.message || "Deneme üretilemedi");
+    } finally {
+      setLoading?.(false);
+    }
+  }
+
+  // bind
+  btnAddPaste?.addEventListener("click", addNoteFromPaste);
+  btnAddFile?.addEventListener("click", addNoteFromFile);
+  btnAddDrive?.addEventListener("click", addNoteFromDrive);
+  btnGen?.addEventListener("click", generateSelectedPractice);
+
+  // distribution toggles
+  function setDistribution(next){
+    distribution = next === "priority" ? "priority" : "balanced";
+    btnDistBalanced?.classList.toggle("is-active", distribution === "balanced");
+    btnDistPriority?.classList.toggle("is-active", distribution === "priority");
+    refresh();
+  }
+  btnDistBalanced?.addEventListener("click", ()=>setDistribution("balanced"));
+  btnDistPriority?.addEventListener("click", ()=>setDistribution("priority"));
+
+  btnSelectAll?.addEventListener("click", ()=>{
+    for (const n of listNotes()) selectedIds.add(n.id);
+    refresh();
+  });
+
+  btnClearSel?.addEventListener("click", ()=>{
+    selectedIds.clear();
+    refresh();
+  });
+
+  bindListEvents();
+  // ensure initial button states
+  btnDistBalanced?.classList.toggle("is-active", distribution === "balanced");
+  btnDistPriority?.classList.toggle("is-active", distribution === "priority");
+  refresh();
+}
+
+
