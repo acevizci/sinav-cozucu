@@ -8,6 +8,77 @@ import { runGeminiAnalysis, runGeminiGenerator } from "./ai.js";
 import { lookupWrongRecord } from "../wrongBook.js";
 
 
+// ================= PREVIEW (ŞABLON STÜDYO İŞARETİ) HELPERS =================
+function getStudioPreviewSrc(q){
+  if (!q) return null;
+  const p = q.preview ?? q.studioPreview ?? q._studioPreview ?? null;
+
+  // object forms
+  const obj = (p && typeof p === "object") ? p : null;
+  const src =
+    (obj && (obj.dataUrl || obj.dataURL || obj.url || obj.src)) ||
+    q.previewUrl || q.previewURL ||
+    (typeof p === "string" ? p : null);
+
+  if (!src) return null;
+  const s = String(src).trim();
+  if (!s) return null;
+  // accept data urls and blob urls
+  if (s.startsWith("data:image/") || s.startsWith("blob:")) return s;
+  // allow http(s) in case you later support it
+  if (s.startsWith("http://") || s.startsWith("https://")) return s;
+  return null;
+}
+
+
+let __qPreviewWired = false;
+
+function closeQPreviewModal(){
+  const overlay = document.getElementById("qPreviewModal");
+  if (!overlay) return;
+  overlay.style.display = "none";
+  overlay.setAttribute("aria-hidden","true");
+  const img = document.getElementById("qPreviewImg");
+  if (img) img.src = "";
+}
+
+function openQPreviewModal({ q, src }){
+  const overlay = document.getElementById("qPreviewModal");
+  const img = document.getElementById("qPreviewImg");
+  const title = document.getElementById("qPreviewTitle");
+  if (!overlay || !img) return;
+
+  if (title){
+    const n = q?.n ?? "";
+    title.textContent = n ? `Soru ${n} • İşaretlenen Görsel` : "İşaretlenen Görsel";
+  }
+
+  img.src = src || "";
+  overlay.style.display = "flex";
+  overlay.setAttribute("aria-hidden","false");
+}
+
+function ensureQPreviewModalWired(){
+  if (__qPreviewWired) return;
+  const overlay = document.getElementById("qPreviewModal");
+  if (!overlay) return;
+
+  const closeBtn = document.getElementById("qPreviewClose");
+  if (closeBtn) closeBtn.addEventListener("click", closeQPreviewModal);
+
+  overlay.addEventListener("click", (e)=>{
+    if (e.target === overlay) closeQPreviewModal();
+  });
+
+  document.addEventListener("keydown", (e)=>{
+    if (e.key === "Escape"){
+      const isOpen = overlay.style.display === "flex";
+      if (isOpen) closeQPreviewModal();
+    }
+  });
+
+  __qPreviewWired = true;
+}
 /* ================= MULTI-SELECT HELPERS (Çoklu Seçim Yardımcıları) ================= */
 
 function _lettersFromAny(x) {
@@ -132,6 +203,7 @@ function shouldShowQuestion(state, qN){
 /* ================= ANA RENDER FONKSİYONU ================= */
 export function renderExam(state){
   window.__APP_STATE = state;
+  ensureQPreviewModalWired();
 
   const area = safe("examArea");
   if (!area) return;
@@ -227,6 +299,20 @@ export function renderExam(state){
       `;
     }
 
+    // Şablon Stüdyo işaretli soru görseli (varsa)
+    const _previewSrc = getStudioPreviewSrc(q);
+    const previewBtnHtml = _previewSrc ? `
+<button class="qPreviewBtn qPreviewBtn--has" type="button" title="İşaretlenen soruyu göster">
+  👁
+</button>
+
+
+
+
+
+
+    ` : "";
+
     // Soru HTML Yapısı
     const qDiv = document.createElement("div");
     qDiv.className="q";
@@ -239,6 +325,7 @@ export function renderExam(state){
         <div style="display:flex; align-items:center; flex-wrap:wrap; gap:6px;">
           ${badge}${wbBadge}
           <span class="badge subject-chip" id="subj-chip-${q.n}">${escapeHtml(getQuestionSubject(q))}</span>
+          ${previewBtnHtml}
           ${aiBtnsHtml}
         </div>
       </div>
@@ -254,6 +341,12 @@ export function renderExam(state){
       if (expBtn) expBtn.addEventListener('click', (e) => runGeminiAnalysis(parseInt(e.target.dataset.qn)));
       const genBtn = qDiv.querySelector('.ai-gen-trigger');
       if (genBtn) genBtn.addEventListener('click', (e) => runGeminiGenerator(parseInt(e.target.dataset.qn)));
+    }
+
+    // Preview ikon butonu
+    const pBtn = qDiv.querySelector(".qPreviewBtn");
+    if (pBtn && _previewSrc){
+      pBtn.addEventListener("click", ()=> openQPreviewModal({ q, src:_previewSrc }));
     }
 
     const opts = qDiv.querySelector(".opts");
@@ -313,7 +406,7 @@ export function renderExam(state){
               if (input.checked) {
                 if (cur.size >= selectCount) {
                   input.checked = false;
-                  window.showToast?.({ title: "Seçim limiti", msg: `En fazla ${selectCount} şık seçebilirsin.`, kind: "warn" });
+                  window.showToast?.({ id:"EXAM_CHOICE_LIMIT", vars:{ count: selectCount }, kind:"warn" });
                   return;
                 }
                 cur.add(L);

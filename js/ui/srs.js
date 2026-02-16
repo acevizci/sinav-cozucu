@@ -146,7 +146,7 @@ export function openSrsModal(data) {
         if (typeof window.startSrsBySubject === "function") {
           window.startSrsBySubject(sub);
         } else {
-          showWarn?.("SRS başlatıcı bulunamadı (startSrsBySubject)");
+          showWarn?.({id:"SRS_STARTER_MISSING"});
         }
       };
     });

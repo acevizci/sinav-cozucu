@@ -4,6 +4,7 @@
 import { normalizeText } from "../utils.js";
 import { readFileAsText } from "../parser.js";
 import { listNotes, upsertNote, removeNote, renameNote, makeSelectionHash } from "./notesStore.js";
+import { appError } from "../ui/uiAlert.js";
 // ✅ DÜZELTME: deleteAttempt buraya eklendi
 import { getNextAttempt, setNextAttempt, recordAttempt, getPreviousHints, deleteAttempt } from "./practiceHistoryStore.js";
 import { buildSourcesFromNotes, computeBalancedAllocation, computePriorityAllocation } from "./multiSourceMerge.js";
@@ -128,6 +129,41 @@ export function initNotesTab(ctx){
   const selCount = document.getElementById("notesSelCount");
   const preview = document.getElementById("notesPreview");
   const btnGen = document.getElementById("btnGeneratePractice");
+
+  // ✅ error box (Drive ile aynı bileşen stili)
+  
+const notesErrorBox = document.getElementById("notesErrorBox");
+
+function clearNotesError(){
+  if (!notesErrorBox) return;
+  notesErrorBox.style.display = "none";
+  notesErrorBox.innerHTML = "";
+}
+
+function showNotesError(msg){
+  if (!notesErrorBox) return;
+
+  // escapeHtml is available in this module (prevents any HTML injection)
+  const safeMsg = escapeHtml(String(msg || "Bir hata oluştu."));
+
+  notesErrorBox.innerHTML = `
+    <div class="drive-error-card" role="status" aria-live="polite">
+      <div class="drive-error-icon" aria-hidden="true">⚠️</div>
+      <div class="drive-error-text">
+        <div class="drive-error-title">Notlar</div>
+        <div class="drive-error-desc">${safeMsg}</div>
+      </div>
+      <button class="drive-error-btn" type="button" data-notes-err-dismiss>Tamam</button>
+    </div>
+  `;
+
+  notesErrorBox.style.display = "block";
+
+  notesErrorBox
+    .querySelector("[data-notes-err-dismiss]")
+    ?.addEventListener("click", clearNotesError);
+}
+
   const btnAddPaste = document.getElementById("btnAddNotePaste");
   const btnAddFile = document.getElementById("btnAddNoteFile");
   const btnAddDrive = document.getElementById("btnAddNoteDrive");
@@ -146,6 +182,7 @@ export function initNotesTab(ctx){
   let dragId = null;
 
   const selectedIds = new Set();
+
 
   // --- İÇ YARDIMCI FONKSİYONLAR ---
 
@@ -322,9 +359,9 @@ export function initNotesTab(ctx){
             const success = deleteAttempt(selHash, attemptNo);
             if (success) {
                 renderPracticeHistory(selHash);
-                if (typeof showToast === "function") showToast({ title: "Başarılı", msg: `Deneme #${attemptNo} çöpe atıldı.`, kind: "ok" });
+                if (typeof showToast === "function") showToast({ id:"PRACTICE_ATTEMPT_TRASHED", vars:{ attemptNo }, kind:"ok" });
             } else {
-                 if (typeof showWarn === "function") showWarn("Silinemedi. Kayıt bulunamadı.");
+                 if (typeof showWarn === "function") showWarn({id:"NOTE_RECORD_NOT_FOUND"});
             }
         } else {
             console.error("deleteAttempt fonksiyonu bulunamadı.");
@@ -341,20 +378,20 @@ export function initNotesTab(ctx){
 
   async function loadPastAttempt(selHash, attemptNo) {
     try {
-      if (typeof setLoading === "function") setLoading(true, `Deneme #${attemptNo} yükleniyor...`);
+      if (typeof setLoading === "function") setLoading(true, { id:"PRACTICE_LOADING_ATTEMPT", vars:{ attemptNo } });
       
       const rawData = localStorage.getItem("acumen_practice_history_v1");
       const db = rawData ? JSON.parse(rawData) : { bySel: {} };
       const row = db.bySel[selHash];
       
       if (!row || !row.attempts || !row.attempts[attemptNo]) {
-        throw new Error("Kayıt bulunamadı.");
+        throw appError("ERR_KAYIT_BULUNAMADI");
       }
 
       const savedExam = row.attempts[attemptNo].parsedData; 
       if (!savedExam) {
          // Eski kayıtlarda veri olmadığı için buraya düşer
-         throw new Error("Bu deneme eski sürümle oluşturulmuş, içeriği yüklenemiyor. Lütfen yeni bir deneme üret.");
+         throw appError("ERR_BU_DENEME_ESKI_SURUMLE_OLUSTURULMUS");
       }
 
       state.parsed = JSON.parse(JSON.stringify(savedExam));
@@ -366,11 +403,11 @@ export function initNotesTab(ctx){
       
       if (typeof startExam === "function") {
         startExam();
-        if (typeof showToast === "function") showToast({ title: "Başarılı", msg: `Deneme #${attemptNo} yüklendi.`, kind: "ok" });
+        if (typeof showToast === "function") showToast({ id:"PRACTICE_ATTEMPT_LOADED", vars:{ attemptNo }, kind:"ok" });
       }
     } catch (err) {
       console.error(err);
-      if (typeof showWarn === "function") showWarn(err.message);
+      if (typeof showWarn === "function") showWarn(err);
     } finally {
       if (typeof setLoading === "function") setLoading(false);
     }
@@ -517,7 +554,7 @@ export function initNotesTab(ctx){
       onOk: (ov)=>{
         const title = ov.querySelector("#noteTitle")?.value;
         const text = ov.querySelector("#noteText")?.value;
-        if (!text || String(text).trim().length < 80) throw new Error("Not çok kısa. Biraz daha içerik ekle.");
+        if (!text || String(text).trim().length < 80) throw appError("ERR_NOT_COK_KISA_BIRAZ_DAHA_ICERIK_EKLE");
         const note = upsertNote({ title, text, source: "paste" });
         selectedIds.add(note.id);
         refresh();
@@ -540,10 +577,10 @@ export function initNotesTab(ctx){
         const text = await readFileAsText(f);
         const note = upsertNote({ title: f.name, text, source: "file" });
         selectedIds.add(note.id);
-        showToast?.({ title:"Not", msg:"Dosya notlara eklendi", kind:"ok" });
+        showToast?.({ id:"PRACTICE_FILE_ADDED_TO_NOTES", kind:"ok" });
       } catch (err){
         console.error(err);
-        showWarn?.(err?.message || "Dosya okunamadı");
+        showWarn?.(err?.message || {id:"NOTE_FILE_READ_FAILED"});
       } finally {
         setLoading?.(false);
         inp.remove();
@@ -556,7 +593,7 @@ export function initNotesTab(ctx){
 
   async function addNoteFromDrive(){
     if (typeof listMyDriveBooklets !== "function" || typeof fetchDriveFileAsFileOrText !== "function"){
-      showWarn?.("Drive entegrasyonu bulunamadı");
+      showWarn?.({id:"DRIVE_INTEGRATION_MISSING"});
       return;
     }
 
@@ -674,7 +711,7 @@ export function initNotesTab(ctx){
               else if (res?.text) text = res.text;
 
               if (!text || String(text).trim().length < 80)
-                throw new Error("Drive içeriği alınamadı veya çok kısa.");
+                throw appError("ERR_DRIVE_ICERIGI_ALINAMADI_VEYA_COK_KIS");
 
               const note = upsertNote({
                 title: name,
@@ -684,21 +721,54 @@ export function initNotesTab(ctx){
               });
 
               selectedIds.add(note.id);
-              showToast?.({ title:"Drive", msg:"Not eklendi", kind:"ok" });
+              showToast?.({ id:"PRACTICE_DRIVE_NOTE_ADDED", kind:"ok" });
               refresh();
-            } catch(err){
-              console.error(err);
-              showWarn?.(err?.message || "Drive not eklenemedi");
-            } finally {
-              setLoading?.(false);
-            }
+            } catch (err){
+  console.error(err);
+
+  const code = err?.error?.code ?? err?.status ?? err?.code ?? null;
+  const statusText = String(err?.error?.status || "");
+  const msgText = String(err?.error?.message || err?.message || "");
+
+  const is401 =
+    code === 401 ||
+    statusText === "UNAUTHENTICATED" ||
+    /401|Invalid Credentials|UNAUTHENTICATED/i.test(msgText);
+
+  if (is401){
+    showNotesError?.("Drive bağlantısı süresi doldu. Yeniden bağlanın.");
+  } else {
+    showNotesError?.(msgText || "Drive not eklenemedi.");
+  }
+
+  // İstersen toast kalsın:
+  // showWarn?.(msgText || "Drive not eklenemedi");
+
+} finally {
+  setLoading?.(false);
+}
           });
         });
       } catch (e){
-        console.error(e);
-        showWarn?.(e?.message || "Drive listesi alınamadı");
-        elList.innerHTML = `<div class="drivePickEmpty">Drive listesi alınamadı.</div>`;
-      } finally {
+  console.error(e);
+
+  const code = e?.error?.code ?? e?.status ?? e?.code ?? null;
+  const statusText = String(e?.error?.status || "");
+  const msgText = String(e?.error?.message || e?.message || "");
+
+  const is401 =
+    code === 401 ||
+    statusText === "UNAUTHENTICATED" ||
+    /401|Invalid Credentials|UNAUTHENTICATED/i.test(msgText);
+
+  if (is401){
+    showNotesError?.("Drive bağlantısı süresi doldu. Yeniden bağlanın.");
+  } else {
+    showNotesError?.(msgText || "Drive listesi alınamadı.");
+  }
+
+  elList.innerHTML = `<div class="drivePickEmpty">Drive listesi alınamadı.</div>`;
+} finally {
         setLoading?.(false);
       }
     }
@@ -714,73 +784,88 @@ export function initNotesTab(ctx){
     await loadFolder("root");
   }
 
-  async function generateSelectedPractice(){
-    const sel = getSelectedNotesOrdered();
-    const sources = buildSourcesFromNotes(sel);
-    if (sources.length === 0){
-      showWarn?.("Seçili notlarda yeterli içerik yok.");
-      return;
-    }
+async function generateSelectedPractice(){
+  const sel = getSelectedNotesOrdered();
+  const sources = buildSourcesFromNotes(sel);
+  if (sources.length === 0){
+    showWarn?.({id:"NOTES_EMPTY_SELECTION"});
+    return;
+  }
 
-    const selIds = Array.from(selectedIds);
-    const selectionHash = makeSelectionHash(selIds);
+  const selIds = Array.from(selectedIds);
+  const selectionHash = makeSelectionHash(selIds);
 
-    let attemptNo = Number(inpAttempt?.value || 0) || 0;
-    if (!attemptNo || attemptNo < 1){
-      attemptNo = getNextAttempt(selectionHash);
-      if (inpAttempt) inpAttempt.value = String(attemptNo);
-    }
+  let attemptNo = Number(inpAttempt?.value || 0) || 0;
+  if (!attemptNo || attemptNo < 1){
+    attemptNo = getNextAttempt(selectionHash);
+    if (inpAttempt) inpAttempt.value = String(attemptNo);
+  }
 
-    const alloc = (distribution === "priority")
-      ? computePriorityAllocation(DEFAULT_SETTINGS.questionCount, sources.length)
-      : computeBalancedAllocation(DEFAULT_SETTINGS.questionCount, sources.length);
+  const alloc = (distribution === "priority")
+    ? computePriorityAllocation(DEFAULT_SETTINGS.questionCount, sources.length)
+    : computeBalancedAllocation(DEFAULT_SETTINGS.questionCount, sources.length);
 
-    const settings = { ...DEFAULT_SETTINGS, distribution, allocation: alloc };
+  const settings = { ...DEFAULT_SETTINGS, distribution, allocation: alloc };
+
+  try {
+    clearNotesError?.(); // ✅ önceki hata kartını temizle
+
+    setLoading?.(true, { id:"PRACTICE_GENERATING_ATTEMPT", vars:{ attemptNo } });
+    const previous = getPreviousHints(selectionHash);
+    const resp = await generatePractice({ sources, attemptNo, settings, previous });
+    setLoading?.(true, { sub:{ id:"AI_STEP_PARSING" } });
+    const parsed = toParsedExam(resp, { fallbackTitle: `Deneme ${attemptNo}` });
+    setLoading?.(true, { sub:{ id:"AI_STEP_VALIDATING" } });
+    validateParsedExam(parsed);
+
+    const finalParsed = (typeof applyShuffle === "function")
+      ? applyShuffle(parsed, { shuffleQ: !!state.shuffleQ, shuffleO: !!state.shuffleO })
+      : parsed;
+
+    finalParsed.meta = finalParsed.meta || {};
+    finalParsed.meta.isAiGenerated = true;
+    finalParsed.meta.selectionHash = selectionHash;
+    finalParsed.meta.attemptNo = attemptNo;
+    finalParsed.meta.sourceIds = sources.map(s=>s.id);
+    finalParsed.meta.sourceTitles = sources.map(s=>s.title);
+    finalParsed.meta.distribution = distribution;
+    finalParsed.meta.orderedSourceIds = sources.map(s=>s.id);
+    finalParsed.meta.keySource = finalParsed.meta.keySource || "ai";
+
+    state.parsed = finalParsed;
+    state.rawText = "";
+    state.mode = "prep";
+    state.answers?.clear?.();
+
+    paintAll?.();
+    persist?.();
 
     try {
-      setLoading?.(true, `Deneme ${attemptNo} üretiliyor…`);
-      const previous = getPreviousHints(selectionHash);
-      const resp = await generatePractice({ sources, attemptNo, settings, previous });
-      const parsed = toParsedExam(resp, { fallbackTitle: `Deneme ${attemptNo}` });
-      validateParsedExam(parsed);
+      setLoading?.(true, { sub:{ id:"AI_STEP_SAVING" } });
+      recordAttempt(selectionHash, attemptNo, finalParsed);
+      setNextAttempt(selectionHash, attemptNo + 1);
+      if (inpAttempt) inpAttempt.value = String(attemptNo + 1);
+    } catch (e) { console.error(e); }
 
-      const finalParsed = (typeof applyShuffle === "function")
-        ? applyShuffle(parsed, { shuffleQ: !!state.shuffleQ, shuffleO: !!state.shuffleO })
-        : parsed;
+    try { startExam?.(); } catch (e) { console.error(e); }
+    showToast?.({ id:"PRACTICE_AI_ATTEMPT_READY", vars:{ attemptNo }, kind:"ok" });
 
-      finalParsed.meta = finalParsed.meta || {};
-      finalParsed.meta.isAiGenerated = true;
-      finalParsed.meta.selectionHash = selectionHash;
-      finalParsed.meta.attemptNo = attemptNo;
-      finalParsed.meta.sourceIds = sources.map(s=>s.id);
-      finalParsed.meta.sourceTitles = sources.map(s=>s.title);
-      finalParsed.meta.distribution = distribution;
-      finalParsed.meta.orderedSourceIds = sources.map(s=>s.id);
-      finalParsed.meta.keySource = finalParsed.meta.keySource || "ai";
+  } catch (err){
+    console.error(err);
 
-      state.parsed = finalParsed;
-      state.rawText = "";
-      state.mode = "prep";
-      state.answers?.clear?.();
+    // ✅ Tema uyumlu glass uyarı kartı
+    showNotesError?.(err?.message || "Deneme üretilemedi. Lütfen notları kontrol et.");
 
-      paintAll?.();
-      persist?.();
+    // ✅ merkezi hata toast
+    showWarn?.(err);
 
-      try {
-        recordAttempt(selectionHash, attemptNo, finalParsed);
-        setNextAttempt(selectionHash, attemptNo + 1);
-        if (inpAttempt) inpAttempt.value = String(attemptNo + 1);
-      } catch (e) { console.error(e); }
+    return;
 
-      try { startExam?.(); } catch (e) { console.error(e); }
-      showToast?.({ title:"AI", msg:`Deneme ${attemptNo} hazır. Başlatıldı.`, kind:"ok" });
-    } catch (err){
-      console.error(err);
-      showWarn?.(err?.message || "Deneme üretilemedi");
-    } finally {
-      setLoading?.(false);
-    }
+  } finally {
+    setLoading?.(false);
   }
+}
+
 
   function setDistribution(next){
     distribution = next === "priority" ? "priority" : "balanced";

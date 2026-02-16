@@ -2,9 +2,10 @@ import { State } from "./state.js";
 import { toast, downloadJson, getSafeOrigin, setOcrUI } from "./ui.js";
 import { extractFromPdfDoc } from "./extract-pdf.js";
 import { extractFromImageOcr } from "./extract-image-ocr.js";
+import { appError } from "../ui/uiAlert.js";
 
 export async function exportToApp(){
-  if (!State.questions.length) { alert("Lütfen en az bir soru işaretleyin."); return; }
+  if (!State.questions.length) { window.showToast?.({id:"STUDIO_NO_QUESTION_SELECTED", kind:"warn"}); if(!window.showToast) (window.showWarn?.({ id:"STUDIO_NO_QUESTION_SELECTED", vars: {} })) || console.warn(window.uiMsg ? window.uiMsg("STUDIO_NO_QUESTION_SELECTED", {}) : ""); return; }
 
   try{
     toast("Aktarım", "Metinler çıkarılıyor…");
@@ -12,7 +13,7 @@ export async function exportToApp(){
     let finalData;
     if (State.pdfDoc) finalData = await extractFromPdfDoc(State.pdfDoc, State.questions);
     else if (State.img) finalData = await extractFromImageOcr(State.img, State.questions);
-    else throw new Error("Doküman yok.");
+    else throw appError("ERR_DOKUMAN_YOK");
 
     const origin = getSafeOrigin();
 
@@ -29,6 +30,5 @@ export async function exportToApp(){
     toast("Aktarım", "Pencere bağlantısı yok. JSON indirildi.", 2600);
   } catch (err) {
     setOcrUI(false);
-    alert("Hata: " + (err?.message || String(err)));
-  }
+    const r=(err?.message||String(err)); window.showToast?.({id:"STUDIO_EXPORT_ERROR", vars:{reason:r}, kind:"bad"}); if(!window.showToast) console.warn(window.uiMsg ? window.uiMsg("GENERIC_ERROR", { reason: r }) : r); }
 }

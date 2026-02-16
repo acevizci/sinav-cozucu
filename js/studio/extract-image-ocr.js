@@ -1,9 +1,10 @@
 import { normalizeText, splitStemAndOptions, optionsByLetterFromMap } from "./text.js";
 import { cropCanvas } from "./preview.js";
 import { setOcrUI } from "./ui.js";
+import { appError } from "../ui/uiAlert.js";
 
 export async function extractFromImageOcr(imgEl, questionsList){
-  if (typeof Tesseract === "undefined") throw new Error("Tesseract.js yüklenemedi");
+  if (typeof Tesseract === "undefined") throw appError("ERR_TESSERACT_JS_YUKLENEMEDI");
 
   const src = document.createElement("canvas");
   const w = imgEl.naturalWidth || imgEl.width;

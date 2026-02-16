@@ -8,7 +8,7 @@ import "./ui/version.js"; // sürüm kontrolü (side-effect)
 try { ensureThemePatches(); } catch {}
 
 export { refreshSubjectChips, refreshSubjectChart } from "./ui/subjects.js";
-export { setStatus, showWarn, showToast, setLoading } from "./ui/status.js";
+export { setStatus, showWarn, showToast, setLoading, msg, MSG, bindGlobal as bindAlertGlobals } from "./ui/uiAlert.js";
 export { updateModeUI, updateStats } from "./ui/mode_stats.js";
 export { generateAnswerKeyWithGemini, runGeminiAnalysis, runGeminiGenerator, fillMissingSubjectsWithGemini } from "./ui/ai.js";
 export { renderExam } from "./ui/exam.js";

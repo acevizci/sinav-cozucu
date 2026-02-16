@@ -25,14 +25,14 @@ export function createExamFlow(ctx) {
   async function doParse({ autoStartHint = true } = {}) {
     try {
       showWarn("");
-      setStatus("okunuyor...");
-      setLoading(true, "Ayrıştırılıyor…");
+      setStatus({ id:"STATUS_READING" });
+      setLoading(true, { id:"EXAM_PARSING_LOADING" });
 
       const file = el("fileInput").files?.[0];
       const pasted = el("pasteArea").value;
       const text = file ? await readFileAsText(file) : pasted;
       
-      if (!normalizeText(text)) throw new Error("Metin yok");
+      if (!normalizeText(text)) { showWarn({ id:"EXAM_NO_TEXT" }); return; }
 
       // Dosya İkonunu Belirle
       let fileIcon = null;
@@ -56,6 +56,21 @@ export function createExamFlow(ctx) {
       const keyCount = state.parsed?.keyCount || 0;
       state.parsed.meta.keyCoverage = totalQ ? (keyCount / totalQ) : 0;
       if (!state.parsed.meta.keySource) state.parsed.meta.keySource = keyCount ? "doc" : "none";
+
+      // ⚠️ Cevap anahtarı uyuşmazlığı: kullanıcıyı daha baştan bilgilendir.
+      // Not: Değerlendirmede anahtarı olmayan sorular zaten dışarıda tutulur.
+      const missingKeyCountOnLoad = Math.max(0, totalQ - keyCount);
+      if (totalQ > 0 && missingKeyCountOnLoad > 0) {
+        try {
+          showToast?.({
+            id: "ANSWERKEY_MISMATCH_ON_LOAD",
+            vars: { missing: missingKeyCountOnLoad, keyed: keyCount, total: totalQ },
+            kind: "warn",
+            dedupeKey: "answerkey_mismatch_on_load",
+            timeout: 4200,
+          });
+        } catch {}
+      }
 
       // 🔥🔥🔥 KRİTİK EKLENTİ: GEÇMİŞ HATALARI SORGU LA 🔥🔥🔥
       // Bu blok sayesinde normal bir sınav yüklesen bile, daha önce yanlış yaptığın
@@ -82,7 +97,7 @@ if (state.parsed.questions) {
       timer.stop();
       safeStyle("timer", (e) => (e.textContent = "--:--"));
 
-      setStatus("hazır");
+      setStatus({ id:"STATUS_READY" });
       syncGlobals();
       paintAll();
       persist();
@@ -91,11 +106,11 @@ if (state.parsed.questions) {
       if (autoStartHint && as && as.checked) {
         startExam();
       } else {
-        showToast?.({ title: "Hazır", msg: "Sınav ayrıştırıldı.", kind: "ok" });
+        showToast?.({ id:"EXAM_PARSED", kind:"ok" });
       }
     } catch (e) {
-      setStatus("hata");
-      showWarn(e.message);
+      setStatus({ id:"STATUS_ERROR" });
+      showWarn(e);
     } finally {
       setLoading(false);
     }
@@ -177,6 +192,8 @@ if (state.parsed.questions) {
     const qs = state.parsed.questions || [];
     const keyMap = state.parsed.answerKey || {};
     let correct = 0, wrong = 0, blank = 0, keyedTotal = 0;
+    let missingKeyCount = 0;
+    let extraKeyCount = 0;
 
     // Helper Functions
     const norm = (v) => {
@@ -200,15 +217,20 @@ if (state.parsed.questions) {
       });
     };
 
+    // Anahtarın fazlalıklarını tespit et (soru numarasıyla eşleşmeyen key entry)
+    const qNumSet = new Set(qs.map(q => String(q?.n)).filter(Boolean));
+    extraKeyCount = Object.keys(keyMap || {}).filter(k => k && !qNumSet.has(String(k))).length;
+
     // Puanlama Döngüsü
     for (const q of qs) {
-      let rawKey = keyMap[q.n] || keyMap[String(q.n)] || q.answer || q.correctAnswer;
+      let rawKey = keyMap[q.n] || keyMap[String(q.n)] || keyMap[Number(q.n)] || q.answer || q.correctAnswer || q.dogruCevap || q._answerFromSolution;
       // Tek soru varsa ve anahtar uyumsuzsa düzelt
       if (!rawKey && qs.length === 1 && Object.keys(keyMap).length === 1) {
           rawKey = Object.values(keyMap)[0];
       }
 
-      if (!rawKey) continue; 
+      // Anahtar yoksa bu soruyu değerlendirmeye dahil etmeyiz.
+      if (!rawKey) { missingKeyCount++; continue; }
       keyedTotal++;
 
       let uRaw = state.answers instanceof Map ? state.answers.get(q.n) : state.answers[q.n];
@@ -240,17 +262,30 @@ if (state.parsed.questions) {
     paintAll();
     persist();
 
+    // ⚠️ Anahtar uyuşmazlığı uyarısı: Anahtarı olmayan sorular değerlendirmeye alınmaz.
+    // (Özellikle AI ile üretilen/eklenen sınavlarda kullanıcıya net bilgi vermek önemli.)
+    if (missingKeyCount > 0) {
+      showToast?.({
+        id: "ANSWERKEY_MISSING_EXCLUDED",
+        vars: { missing: missingKeyCount, total: qs.length, evaluated: keyedTotal },
+        kind: "warn",
+      });
+    }
+    if (extraKeyCount > 0) {
+      showToast?.({
+        id: "ANSWERKEY_EXTRA_IGNORED",
+        vars: { extra: extraKeyCount },
+        kind: "warn",
+      });
+    }
+
     // Kutlama: Konfeti ve Toast
     if (graduatedCount > 0) {
         setTimeout(() => {
             if (typeof confetti === 'function') {
                 confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 }, colors: ['#a855f7', '#3b82f6', '#ffffff'] });
             }
-            showToast?.({ 
-                title: "Harikasın! 🎉", 
-                msg: `${graduatedCount} soruyu Yanlış Defteri'nden sildik!`, 
-                kind: "ok" 
-            });
+            showToast?.({ id:"WRONGBOOK_GRADUATED", vars:{ count: graduatedCount }, kind:"ok" });
         }, 600);
     }
 
@@ -292,13 +327,13 @@ if (state.parsed.questions) {
       total: qs.length,
       answered: correct + wrong,
       correct, wrong, blank, score,
-      keyMissing: (qs.length - keyedTotal),
+      keyMissing: (missingKeyCount || (qs.length - keyedTotal)),
       timeSpent,
       title: state.parsed.title,
       isAiKey: state.parsed?.meta?.keySource === "ai",
     });
 
-    showToast?.({ title: "Bitti", msg: "Sınav tamamlandı.", kind: "ok" });
+    showToast?.({ id:"EXAM_FINISHED", kind:"ok" });
   }
 
   // -------------------------------------------------------------------------
@@ -321,7 +356,7 @@ if (state.parsed.questions) {
     syncGlobals();
     if(el("fileInput")) el("fileInput").value = "";
     if(el("pasteArea")) el("pasteArea").value = "";
-    setStatus("hazır");
+    setStatus({ id:"STATUS_READY" });
 
     paintAll();
     persist();

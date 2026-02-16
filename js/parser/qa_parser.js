@@ -4,8 +4,8 @@
 import { cleanLine, SOLUTION_ANY_RE } from "./text_pipeline.js";
 
 
-const DEBUG_PARSER = !!(typeof window !== "undefined" && window.DEBUG_PARSER);
-const dlog = (...args) => { if (DEBUG_PARSER) console.log(...args); };
+//const DEBUG_PARSER = !!(typeof window !== "undefined" && window.DEBUG_PARSER);
+//const dlog = (...args) => { if (DEBUG_PARSER) console.log(...args); };
 const LETTERS = ["A", "B", "C", "D", "E", "F"];
 
 // Çözüm satırı tespiti

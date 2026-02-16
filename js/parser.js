@@ -119,17 +119,9 @@ export function parseExam(text, { debug = false } = {}) {
 
   // Keep debug hook (but avoid noisy logs in production)
   window.__lastParseResult = result;
-  if (debug) console.log("PARSE RESULT:", result);
+  
 
-  if (debug) {
-    result.__debug = {
-      engine: ENGINE_VERSION,
-      textLen: raw.length,
-      lines: lines.length,
-      blocks: blocks.length,
-      tailKeyCount: Object.keys(tailKey).length,
-    };
-  }
+
 
   return result;
 }

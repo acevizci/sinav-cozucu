@@ -175,7 +175,7 @@ export function openSummaryModal({ total, answered, correct, score, wrong=0, bla
         });
 
         if (wrongQuestions.length === 0) { 
-            alert("Tekrarlanacak yanlış soru bulunamadı."); 
+            window.showToast?.({id:"NO_REPEAT_WRONG_FOUND", kind:"warn"}); 
             return; 
         }
 
@@ -197,18 +197,14 @@ export function openSummaryModal({ total, answered, correct, score, wrong=0, bla
         if (chkWrong) chkWrong.checked = false;
 
         if (window.showToast) {
-            window.showToast({ 
-                title:"Tekrar Başladı", 
-                msg:`${wrongQuestions.length} yanlış soru hazırlanıyor.`, 
-                kind:"warn" 
-            });
+            window.showToast({ id:"SUMMARY_RETRY_STARTED", vars:{ count: wrongQuestions.length }, kind:"warn" });
         }
         
         window.scrollTo({ top: 0, behavior: "smooth" });
 
       } catch (e) {
         console.error("Retry Error:", e);
-        alert("Hata oluştu: " + e.message);
+        window.showToast?.({ id:"SUMMARY_RETRY_FAILED", vars:{ reason: (e?.message||"") }, kind:"bad" });
       }
     };
   }

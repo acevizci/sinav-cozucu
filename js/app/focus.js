@@ -1,9 +1,10 @@
+import { appError } from "../ui/uiAlert.js";
 // js/app/focus.js
 // Zero-behavior refactor: focus/nav helpers extracted from app.js
 
 export function createFocusHelpers(ctx = {}) {
   const state = ctx.state || window.__APP_STATE;
-  if (!state) throw new Error("createFocusHelpers: state missing");
+  if (!state) throw appError("ERR_CREATEFOCUSHELPERS_STATE_MISSING");
 
   const el = ctx.el || (id => document.getElementById(id));
   const renderExam = ctx.renderExam;

@@ -3,6 +3,7 @@
 
 import { getGoogleAccessToken } from "./auth.js";
 import { showToast, setLoading } from "./ui.js";
+import { appError } from "./ui/uiAlert.js";
 
 const DRIVE_API_V3 = "https://www.googleapis.com/drive/v3";
 
@@ -55,7 +56,7 @@ async function authedFetch(url, options = {}) {
     token = await getGoogleAccessToken(true);
   }
 
-  if (!token) throw new Error("Google Drive erişim izni alınamadı.");
+  if (!token) throw appError("ERR_GOOGLE_DRIVE_ERISIM_IZNI_ALINAMADI");
 
   options.headers = {
     ...options.headers,
@@ -81,7 +82,7 @@ async function authedFetch(url, options = {}) {
   // 3. Hala hata varsa fırlat
   if (!res.ok) {
     const errText = await res.text().catch(() => "");
-    throw new Error(`Drive API Hata (${res.status}): ${errText}`);
+    throw appError("ERR_DRIVE_API", { status: res.status, details: errText });
   }
 
   return res;
@@ -178,7 +179,7 @@ export async function listMyDriveBooklets({ folderLinkOrId="root", pageSize=200,
   let qParts = [];
 
   if (mode === "folder"){
-    if (!folderId) throw new Error("Klasör ID çözülemedi.");
+    if (!folderId) throw appError("ERR_KLASOR_ID_COZULEMEDI_2");
     qParts = [`'${folderId}' in parents`, "trashed=false", QUERY_FOLDER_OR_FILES];
   } else {
     qParts = ["trashed=false", QUERY_FILES];
@@ -215,12 +216,12 @@ export async function listMyDriveBooklets({ folderLinkOrId="root", pageSize=200,
 
 export async function listFolderBooklets({ folderLinkOrId, pageSize=200 } = {}){
   const folderId = parseDriveFolderId(folderLinkOrId);
-  if (!folderId) throw new Error("Klasör ID çözülemedi.");
+  if (!folderId) throw appError("ERR_KLASOR_ID_COZULEMEDI_2");
   return await listMyDriveBooklets({ folderLinkOrId: folderId, pageSize });
 }
 
 export async function fetchBookletText(fileId, mimeType){
-  if (!fileId) throw new Error("fileId yok");
+  if (!fileId) throw appError("ERR_FILEID_YOK_2");
   let url = null;
 
   // Google Docs Export
@@ -236,7 +237,7 @@ export async function fetchBookletText(fileId, mimeType){
 }
 
 export async function fetchDriveFileAsFileOrText({ id, mimeType, name }){
-  if (!id) throw new Error("fileId yok");
+  if (!id) throw appError("ERR_FILEID_YOK_2");
   
   // 1. Google Docs ise Text Export
   if (mimeType === "application/vnd.google-apps.document"){

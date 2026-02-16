@@ -1,19 +1,22 @@
+import { appError } from "../ui/uiAlert.js";
 // js/aiPractice/practiceGenerator.js
 // CLIENT-SIDE Gemini Practice Generator (Temporary Dev Mode)
 // Model is auto-resolved via ListModels (robust against model name changes)
 
 async function listModels(apiKey){
+  try { window.setLoading?.(true, { sub:{ id:"AI_STEP_LISTING_MODELS" } }); } catch {}
   const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}`;
   const res = await fetch(url);
   if (!res.ok) {
     const t = await res.text().catch(()=> "");
-    throw new Error(`ListModels ${res.status}: ${t.slice(0,200)}`);
+    throw appError("ERR_AI_LIST_MODELS_FAILED", { status: res.status, details: t.slice(0,200) });
   }
   const data = await res.json();
   return data?.models || [];
 }
 
 async function resolveModel(apiKey){
+  try { window.setLoading?.(true, { sub:{ id:"AI_STEP_RESOLVING_MODEL" } }); } catch {}
   // cache 24h
   const cacheKey = "ACUMEN_GEMINI_MODEL";
   const cacheTsKey = "ACUMEN_GEMINI_MODEL_TS";
@@ -34,7 +37,7 @@ async function resolveModel(apiKey){
     viable.find(m => (m.name || "").includes("pro")) ||
     viable[0];
 
-  if (!best?.name) throw new Error("generateContent destekleyen model bulunamadı.");
+  if (!best?.name) throw appError("ERR_GENERATECONTENT_DESTEKLEYEN_MODEL_BU");
 
   // best.name genelde "models/xxx" gelir -> endpoint'te biz "models/{model}:generateContent" kullanacağız
   localStorage.setItem(cacheKey, best.name);
@@ -51,7 +54,9 @@ function normalizeJsonText(text){
 async function callGeminiJSON(prompt){
   // ACUMEN ai.js de GEMINI_KEY kullanıyor
   const apiKey = localStorage.getItem("GEMINI_KEY") || localStorage.getItem("GEMINI_API_KEY");
-  if (!apiKey) throw new Error("Gemini API key bulunamadı. (localStorage: GEMINI_KEY)");
+  if (!apiKey) throw appError("ERR_GEMINI_API_KEY_BULUNAMADI_LOCALSTORA");
+
+  try { window.setLoading?.(true, { sub:{ id:"AI_STEP_PREPARING_PROMPT" } }); } catch {}
 
   const selectedModel = await resolveModel(apiKey); // "models/...."
   const url = `https://generativelanguage.googleapis.com/v1beta/${selectedModel}:generateContent?key=${encodeURIComponent(apiKey)}`;
@@ -65,6 +70,7 @@ async function callGeminiJSON(prompt){
     contents: [{ role: "user", parts: [{ text: prompt }] }],
   };
 
+  try { window.setLoading?.(true, { sub:{ id:"AI_STEP_GENERATING" } }); } catch {}
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -73,19 +79,20 @@ async function callGeminiJSON(prompt){
 
   if (!res.ok){
     const t = await res.text().catch(()=> "");
-    throw new Error(`Gemini hata ${res.status}: ${t.slice(0,500)}`);
+    throw appError("ERR_GEMINI_CALL_FAILED", { status: res.status, details: t.slice(0,500) });
   }
 
   const data = await res.json();
+  try { window.setLoading?.(true, { sub:{ id:"AI_STEP_PARSING" } }); } catch {}
   const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!raw) throw new Error("Gemini boş cevap döndü");
+  if (!raw) throw appError("ERR_GEMINI_BOS_CEVAP_DONDU");
 
   const clean = normalizeJsonText(raw);
   try {
     return JSON.parse(clean);
   } catch {
     console.error("[Gemini RAW]", raw);
-    throw new Error("Gemini JSON parse edilemedi");
+    throw appError("ERR_GEMINI_JSON_PARSE_EDILEMEDI");
   }
 }
 
@@ -131,7 +138,7 @@ ${srcText}
 export async function generatePractice(payload){
   const prompt = buildPrompt(payload);
   const out = await callGeminiJSON(prompt);
-  if (!out?.questions?.length) throw new Error("Gemini geçerli soru üretmedi");
+  if (!out?.questions?.length) throw appError("ERR_GEMINI_GECERLI_SORU_URETMEDI");
   return out;
 }
 

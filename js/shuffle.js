@@ -59,6 +59,7 @@ export function applyShuffle(parsed, { shuffleQ=true, shuffleO=true }){
       }
 
       return {
+        ...q,
         n: displayN,
         origN: orig,
         text: q.text,
@@ -78,6 +79,7 @@ export function applyShuffle(parsed, { shuffleQ=true, shuffleO=true }){
     }
 
     return {
+      ...q,
       n: displayN,
       origN: orig,
       text: q.text,

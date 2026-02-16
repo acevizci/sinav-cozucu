@@ -8,7 +8,7 @@ import { createTimer } from "./timer.js";
 import { saveState, loadState, clearSaved } from "./storage.js";
 import { addToWrongBookFromExam, buildWrongOnlyParsed, exportWrongBook, clearWrongBook, wrongBookStats, wrongBookDashboard, getSrsInfoForParsed, setSrsQualityByQuestion } from "./wrongBook.js";
 import {
-  setStatus, showWarn, setLoading, showToast,
+  setStatus, showWarn, setLoading, showToast, bindAlertGlobals,
   updateModeUI, updateStats, buildNav, refreshNavColors,
   renderFocusMiniNav, refreshFocusMiniNav,
   renderExam, attachKeyboardShortcuts,
@@ -18,7 +18,7 @@ import {
   generateAnswerKeyWithGemini,
 } from "./ui.js";
 // AI Fonksiyonları
-import { runGeminiAnalysis, runGeminiGenerator } from "./ui/ai.js";
+import { runGeminiAnalysis, runGeminiGenerator, updateAiKeyBadges, ensureGeminiKeyOnEntry } from "./ui/ai.js";
 
 import { listMyDriveBooklets, listFolderBooklets, fetchDriveFileAsFileOrText } from "./drive.js";
 import { bindRenderContext, paintAll } from "./app/render.js";
@@ -30,25 +30,42 @@ import { createFocusHelpers } from "./app/focus.js";
 import { initNotesTab } from "./aiPractice/practiceUI.js";
 
 
-// js/app.js - İmza
+// js/app.js - İmza (only when debug is enabled)
+try {
+  if (typeof window !== 'undefined' && window.ACUMEN_DEBUG) {
+    console.log(
+      "%c ACUMEN %c v1.3 - Clean ",
+      "background:#a855f7; color:white; font-weight:bold; padding:4px 8px; border-radius:4px 0 0 4px;",
+      "background:#3b82f6; color:white; font-weight:bold; padding:4px 8px; border-radius:0 4px 4px 0;"
+    );
 
-console.log(
-    "%c ACUMEN %c v1.3 - Clean ",
-    "background:#a855f7; color:white; font-weight:bold; padding:4px 8px; border-radius:4px 0 0 4px;",
-    "background:#3b82f6; color:white; font-weight:bold; padding:4px 8px; border-radius:0 4px 4px 0;"
-);
+    console.log(
+      "%c👨‍💻 Developed by Aykut Cevizci",
+      "color: #a855f7; font-family: monospace; font-size: 14px; font-weight: bold;"
+    );
 
-console.log(
-    "%c👨‍💻 Developed by Aykut Cevizci",
-    "color: #a855f7; font-family: monospace; font-size: 14px; font-weight: bold;"
-);
-
-console.log(
-    "%c Bu uygulama sevgi ve kod ile yapılmıştır. ❤️",
-    "color: #71717a; font-size: 11px;"
-);
+    console.log(
+      "%c Bu uygulama sevgi ve kod ile yapılmıştır. ❤️",
+      "color: #71717a; font-size: 11px;"
+    );
+  }
+} catch (e) {}
 
 // Window'a AI fonksiyonlarını bağla
+// Alerts/toasts/status globals (legacy compatibility)
+try { bindAlertGlobals(); } catch (e) {}
+// AI readiness indicators (badge + settings pill)
+try { updateAiKeyBadges(); } catch (e) {}
+// After login: prompt for Gemini key (after welcome/version modals)
+try{
+  window.addEventListener("acumen:auth", (ev)=>{
+    if (ev?.detail?.state === "in") {
+      try { ensureGeminiKeyOnEntry(); } catch {}
+    }
+  });
+} catch(e) {}
+
+
 if (typeof window !== 'undefined') {
     window.runGeminiAnalysis = runGeminiAnalysis;
     window.runGeminiGenerator = runGeminiGenerator;
@@ -198,7 +215,7 @@ let doParse, startExam, finishExam, resetAll;
 const timer = createTimer({
   onTick: () => { persist(); updateFocusHUD(); },
   onDone: () => {
-    showWarn("⏰ Süre doldu. Sınav otomatik bitirildi.");
+    showWarn({id:"TIME_UP_AUTO_FINISH"});
     try { finishExam?.(); } catch (e) { console.error(e); }
   }
 });
@@ -251,7 +268,7 @@ function restore(){
       close();
       clearSaved();
       resetAll();
-      showToast?.({ title:"Sıfırlandı", msg:"Kayıt silindi.", kind:"warn" });
+      showToast?.({ id:"RESUME_DISCARDED", kind:"warn" });
     };
 
     const doResume = () => {
@@ -259,7 +276,7 @@ function restore(){
       Object.assign(state, d);
       state.answers = new Map(d.answersArr || []);
       startExam({ resume:true });
-      showToast?.({ title:"Devam", msg:"Kaldığın yerden devam ediyorsun.", kind:"ok" });
+      showToast?.({ id:"RESUME_CONTINUED", kind:"ok" });
     };
 
     { const b = document.getElementById("btnCloseResume"); if (b) b.onclick = close; }
@@ -369,7 +386,7 @@ try {
 initTheme();           
 startPatiMotivation(); 
 restore();             
-setStatus("hazır");    
+setStatus({ id:"STATUS_READY" });    
 
 (function handleReportReplay(){
   try {
@@ -440,9 +457,11 @@ if (brandLogo) {
 
             setTimeout(() => {
                 // A. Uygulama hafızasını (LocalStorage) temizle
-                try { 
-                    if (typeof clearSaved === 'function') clearSaved(); 
-                } catch (err) { console.log(err); }
+               try { 
+    if (typeof clearSaved === 'function') clearSaved(); 
+} catch (err) { 
+    // Log kaldırıldı
+}
                 
                 // Yedek temizlik (app.js'deki saveState key'i genelde 'acumen_state' olur)
                 localStorage.removeItem('acumen_state'); 

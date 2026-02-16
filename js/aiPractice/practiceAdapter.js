@@ -2,6 +2,7 @@
 // Converts backend response into ACUMEN parsed exam schema.
 
 import { normalizeText } from "../utils.js";
+import { appError } from "../ui/uiAlert.js";
 
 const LETTERS = ["A","B","C","D","E"];
 
@@ -23,7 +24,7 @@ function toOptionMap(choices){
 
 export function toParsedExam(resp, { fallbackTitle = "AI Deneme" } = {}){
   const parsed = resp?.parsedExam || resp?.parsed || resp;
-  if (!parsed) throw new Error("Boş yanıt");
+  if (!parsed) throw appError("ERR_BOS_YANIT");
 
   // If already ACUMEN schema: { title, questions: [{n, text, optionsByLetter}], answerKey }
   if (Array.isArray(parsed.questions) && parsed.questions[0] && parsed.questions[0].optionsByLetter){

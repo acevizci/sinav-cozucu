@@ -2,8 +2,155 @@
 
 import { escapeHtml, loadWrongBook, saveWrongBook, wrongBookDashboard, makeKeyFromQuestion } from "./shared.js";
 import { getChosenOptionId, UI_LETTERS } from "./shared.js";
-import { showToast, setLoading } from "./status.js";
+import { showToast, setLoading, msg } from "./status.js";
 import { refreshSubjectChips, refreshSubjectChart } from "./subjects.js";
+import { appError } from "./uiAlert.js";
+
+// =========================================================
+// AI KEY HEALTH (Badge / Settings indicator)
+// =========================================================
+const AI_KEY_HEALTH_KEY = "GEMINI_KEY_HEALTH";      // ok | bad | unknown
+const AI_KEY_HEALTH_TS  = "GEMINI_KEY_HEALTH_TS";
+
+// NUDGE SNOOZE (when user clicks 'Sonra' / closes)
+const AI_KEY_SNOOZE_UNTIL = "ACUMEN_AI_KEY_SNOOZE_UNTIL"; // epoch ms
+   // epoch ms
+
+function _setAiKeyHealth(state){
+  try{
+    if (!state) {
+      localStorage.removeItem(AI_KEY_HEALTH_KEY);
+      localStorage.removeItem(AI_KEY_HEALTH_TS);
+      return;
+    }
+    localStorage.setItem(AI_KEY_HEALTH_KEY, state);
+    localStorage.setItem(AI_KEY_HEALTH_TS, String(Date.now()));
+  }catch{}
+}
+
+export function updateAiKeyBadges(){
+  try{
+    const badge = document.getElementById("aiReadyBadge");
+    const pill  = document.getElementById("aiKeyStatusPill");
+    const dot   = document.getElementById("aiKeyStatusDot");
+
+    const key = (localStorage.getItem("GEMINI_KEY") || "").trim();
+    const health = (localStorage.getItem(AI_KEY_HEALTH_KEY) || "").trim();
+    const ts = Number(localStorage.getItem(AI_KEY_HEALTH_TS) || "0") || 0;
+    const ageMin = ts ? Math.round((Date.now() - ts) / 60000) : 0;
+
+    // Quick badge near AI actions
+    if (badge) {
+      badge.style.display = (key && health === "ok") ? "inline-flex" : "none";
+      badge.textContent = "✅ AI hazır";
+    }
+
+    // Modal status pill
+    if (pill || dot) {
+      const show = !!(pill || dot);
+      if (pill) pill.style.display = show ? "inline-flex" : "none";
+      if (dot) dot.style.display = show ? "inline-block" : "none";
+
+      let text = "Durum: —";
+      let color = "rgba(255,255,255,0.35)";
+
+      if (!key) {
+        text = "Durum: Anahtar girilmedi";
+        color = "rgba(245,158,11,0.55)";
+      } else if (health === "ok") {
+        text = `Durum: Doğrulandı${ageMin ? ` • ${ageMin} dk önce` : ""}`;
+        color = "rgba(72,187,120,0.75)";
+      } else if (health === "bad") {
+        text = "Durum: Geçersiz anahtar";
+        color = "rgba(239,68,68,0.75)";
+      } else if (health === "unknown") {
+        text = "Durum: Kontrol edilemedi";
+        color = "rgba(245,158,11,0.55)";
+      } else {
+        text = "Durum: Bilinmiyor";
+        color = "rgba(255,255,255,0.35)";
+      }
+
+      if (pill) pill.textContent = text;
+      if (dot) dot.style.background = color;
+    }
+  }catch{}
+// =========================================================
+// AI BUTTON LOCKS (when key missing / invalid)
+// =========================================================
+let _aiLockBound = false;
+
+function applyAiLocks({ key, health }) {
+  const needKey = !key;
+  const badKey  = !!key && health === "bad";
+
+  const lockReason = needKey ? msg("AI_KEY_REQUIRED_SHORT") : (badKey ? msg("AI_KEY_INVALID_SHORT") : "");
+
+  const targets = [
+    { id: "btnAiSolve", wrapId: "aiSolveWrap" },
+    { id: "btnAiSubjects", wrapId: null },
+  ];
+
+  targets.forEach(t => {
+    const btn = document.getElementById(t.id);
+    if (!btn) return;
+
+    const locked = needKey || badKey;
+    btn.disabled = locked;
+    btn.classList.toggle("ai-locked", locked);
+    btn.setAttribute("aria-disabled", locked ? "true" : "false");
+    btn.setAttribute("data-lock-reason", locked ? lockReason : "");
+    btn.title = locked ? lockReason : "";
+
+    // show small lock icon inside button if possible
+    if (locked) {
+      if (!btn.querySelector(".ai-lock-ico")) {
+        const s = document.createElement("span");
+        s.className = "ai-lock-ico";
+        s.textContent = "🔒";
+        s.style.cssText = "margin-left:8px; opacity:.8;";
+        btn.appendChild(s);
+      }
+    } else {
+      const s = btn.querySelector(".ai-lock-ico");
+      if (s) s.remove();
+    }
+  });
+
+  if (!_aiLockBound) bindAiLockClicks();
+}
+
+function bindAiLockClicks() {
+  _aiLockBound = true;
+
+  const openKey = async () => {
+    const existing = (localStorage.getItem("GEMINI_KEY") || "").trim();
+    // If already there but invalid, still open modal to change
+    const k = await requestApiKeyFromModal();
+    if (k) {
+      localStorage.setItem("GEMINI_KEY", String(k).trim());
+      _setAiKeyHealth("unknown"); // will be validated on save inside modal flow
+      try { updateAiKeyBadges(); } catch {}
+      try { showToast?.({ id: "AI_KEY_SAVED", kind: "ok" }); } catch {}
+    }
+  };
+
+  ["btnAiSolve", "btnAiSubjects"].forEach(id => {
+    const btn = document.getElementById(id);
+    if (!btn) return;
+    btn.addEventListener("click", (ev) => {
+      const locked = btn.classList.contains("ai-locked") || btn.disabled;
+      if (!locked) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      try { showToast?.({ id: "AI_KEY_REQUIRED", kind: "warn" }); } catch {}
+      openKey();
+    }, true);
+  });
+}
+
+
+}
 
 // =========================================================
 // 1. API KEY MODAL
@@ -20,10 +167,10 @@ function requestApiKeyFromModal() {
     const btnSave = document.getElementById("btnSaveKeyUi");
     const btnCancel = document.getElementById("btnCancelKeyUi");
 
-    // HTML'de modal yoksa prompt kullan
+    // HTML'de modal yoksa kullanıcıyı prompt ile sıkıştırmayalım; tek merkez UI mesajı göster.
     if (!modal || !input || !btnSave || !btnCancel) {
-      const pKey = window.prompt("Lütfen Gemini API Anahtarınızı girin:\n(AIza... ile başlayan kod)");
-      resolve(pKey ? pKey.trim() : null);
+      try { window.showWarn?.({ id: "AI_KEY_MODAL_MISSING" }); } catch {}
+      resolve(null);
       return;
     }
 
@@ -36,6 +183,8 @@ function requestApiKeyFromModal() {
     // Modalı Aç
     modal.style.display = "flex";
     modal.setAttribute("aria-hidden", "false");
+    // Status pill + badge update (shows current state if key exists)
+    try { updateAiKeyBadges(); } catch {}
     input.value = "";
     input.style.borderColor = "#444";
     if (errorBox) errorBox.style.display = "none";
@@ -43,6 +192,23 @@ function requestApiKeyFromModal() {
     setTimeout(() => { try { input.focus(); } catch {} }, 0);
 
     let finished = false;
+
+    // Gemini API key doğrulama (AI Studio key)
+    async function validateGeminiKey(apiKey) {
+      try {
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}`);
+        if (!res.ok) return false;
+        const data = await res.json().catch(() => ({}));
+        const models = Array.isArray(data.models) ? data.models : [];
+        // generateContent destekli en az 1 model olmalı
+        const has = models.some(m => Array.isArray(m.supportedGenerationMethods) && m.supportedGenerationMethods.includes("generateContent"));
+        return !!has;
+      } catch {
+        // network error etc.
+        throw appError("NETWORK_ERROR");
+      }
+    }
+
 
     const cleanup = () => {
       modal.style.display = "none";
@@ -52,22 +218,65 @@ function requestApiKeyFromModal() {
       input.onkeydown = null;
       input.oninput = null;
       modal.removeEventListener("click", handleOverlayClick);
+      try { updateAiKeyBadges(); } catch {}
     };
 
-    const handleSave = () => {
+    const handleSave = async () => {
       if (finished) return;
       const val = String(input.value || "").trim();
 
-      if (val.length > 20 && val.startsWith("AIza")) {
-        finished = true;
-        cleanup();
-        resolve(val);
-      } else {
+      // Basic format guard (fast)
+      if (!(val.length > 20 && val.startsWith("AIza"))) {
         if (errorBox) {
-          errorBox.textContent = "⚠️ Geçersiz anahtar! 'AIza' ile başlamalı.";
+          errorBox.textContent = msg("AI_KEY_INVALID");
           errorBox.style.display = "block";
         }
         input.style.borderColor = "#ff453a";
+        return;
+      }
+
+      // Live validation (pro UX)
+      try {
+        btnSave.disabled = true;
+        btnSave.style.opacity = "0.7";
+        if (errorBox) {
+          errorBox.textContent = msg("AI_KEY_VALIDATING");
+          errorBox.style.display = "block";
+        }
+
+        const ok = await validateGeminiKey(val);
+
+        if (ok === true) {
+          _setAiKeyHealth("ok");
+          try { showToast({ id: "AI_KEY_VALID", kind: "ok" }); } catch {}
+          finished = true;
+          cleanup();
+          resolve(val);
+          try { updateAiKeyBadges(); } catch {}
+          return;
+        }
+
+        // Explicit invalid key (400/401)
+        _setAiKeyHealth("bad");
+        if (errorBox) {
+          errorBox.textContent = msg("AI_KEY_INVALID_SERVER");
+          errorBox.style.display = "block";
+        }
+        input.style.borderColor = "#ff453a";
+        try { updateAiKeyBadges(); } catch {}
+      }
+  catch (e) {
+    try { window.__acumenKeyPrompting = false; } catch {}
+        // Network / CORS / transient: allow save but warn
+        _setAiKeyHealth("unknown");
+        try { showToast({ id: "AI_KEY_VALIDATE_NET_FAIL", kind: "warn" }); } catch {}
+        finished = true;
+        cleanup();
+        resolve(val);
+        try { updateAiKeyBadges(); } catch {}
+      } finally {
+        btnSave.disabled = false;
+        btnSave.style.opacity = "";
       }
     };
 
@@ -133,12 +342,12 @@ async function callGeminiApi(apiKey, promptText, onSuccess, onError) {
 
     if (!response.ok) {
         const errData = await response.json();
-        throw new Error(errData.error?.message || response.statusText);
+        throw appError("ERR_GEMINI_API", { details: errData.error?.message || response.statusText });
     }
 
     const data = await response.json();
     if(!data.candidates || data.candidates.length === 0) {
-        throw new Error("Model boş cevap döndürdü.");
+        throw appError("ERR_MODEL_BOS_CEVAP_DONDURDU");
     }
     
     onSuccess(data.candidates[0].content.parts[0].text);
@@ -153,11 +362,23 @@ function renderGeminiError(container, err) {
   container.innerHTML = `
     <div style="color:#ef4444; font-size:12px; border:1px solid #ef4444; padding:8px; border-radius:6px; background:rgba(239,68,68,0.1);">
       <strong>⚠️ Hata:</strong> ${err.message}<br><br>
-      <button onclick="localStorage.removeItem('GEMINI_KEY'); this.parentElement.innerHTML='Anahtar silindi. Tekrar deneyin.';" style="background:#ef4444; color:white; border:none; padding:4px 8px; border-radius:4px; cursor:pointer;">
+      <button id="btnResetGeminiKey" style="background:#ef4444; color:white; border:none; padding:4px 8px; border-radius:4px; cursor:pointer;">
         Anahtarı Sil ve Tekrar Dene
       </button>
     </div>
   `;
+
+  try{
+    const btn = container.querySelector("#btnResetGeminiKey");
+    if (btn) {
+      btn.onclick = () => {
+        try { localStorage.removeItem("GEMINI_KEY"); } catch {}
+        try { _setAiKeyHealth(null); } catch {}
+        try { updateAiKeyBadges(); } catch {}
+        container.innerHTML = "Anahtar silindi. Tekrar deneyin.";
+      };
+    }
+  }catch{}
 }
 
 // =========================================================
@@ -166,11 +387,11 @@ function renderGeminiError(container, err) {
 export async function generateAnswerKeyWithGemini(parsed, { limit=80, batchSize=10 } = {}) {
   
   // 🔥 FIX: İşlem başlar başlamaz loading'i aç (API key olsa bile)
-  setLoading(true, "AI cevap anahtarı üretiliyor...");
+  setLoading(true, { id:"AI_KEY_LOADING" });
 
   if (!parsed || !Array.isArray(parsed.questions) || !parsed.questions.length) {
     setLoading(false);
-    throw new Error("AI anahtar üretimi için soru bulunamadı.");
+    throw appError("ERR_AI_ANAHTAR_URETIMI_ICIN_SORU_BULUNAM");
   }
 
   let apiKey = localStorage.getItem("GEMINI_KEY");
@@ -179,12 +400,13 @@ export async function generateAnswerKeyWithGemini(parsed, { limit=80, batchSize=
     apiKey = await requestApiKeyFromModal();
     if (!apiKey) {
       setLoading(false); // İptal edilirse loading'i tamamen kapat
-      throw new Error("Gemini API anahtarı girilmedi.");
+      throw appError("ERR_GEMINI_API_ANAHTARI_GIRILMEDI_2");
     }
     localStorage.setItem("GEMINI_KEY", apiKey);
+    try { updateAiKeyBadges(); } catch {}
     
     // Anahtar alındıktan sonra loading'i TEKRAR aç
-    setLoading(true, "AI cevap anahtarı üretiliyor...");
+    setLoading(true, { id:"AI_KEY_LOADING" });
   }
 
   const qList = parsed.questions.slice(0, Math.max(1, limit));
@@ -232,7 +454,7 @@ export async function generateAnswerKeyWithGemini(parsed, { limit=80, batchSize=
       const batch = qList.slice(i, i + batchSize);
       
       // Kullanıcıya ilerleme durumu göster
-      setLoading(true, `AI cevap anahtarı üretiliyor... (%${Math.round((i / qList.length) * 100)})`);
+      setLoading(true, { id:"AI_KEY_PROGRESS", vars:{ pct: Math.round((i / qList.length) * 100) } });
 
       const promptText = buildPrompt(batch);
       const raw = await call(promptText);
@@ -246,7 +468,7 @@ export async function generateAnswerKeyWithGemini(parsed, { limit=80, batchSize=
       try { obj = JSON.parse(cleaned); }
       catch {
         const m = cleaned.match(/\{[\s\S]*\}/);
-        if (!m) throw new Error("AI çıktısı JSON değil.");
+        if (!m) throw appError("ERR_AI_CIKTISI_JSON_DEGIL");
         obj = JSON.parse(m[0]);
       }
 
@@ -400,7 +622,7 @@ REFERANS ŞIKLAR: A) ${optA} B) ${optB} C) ${optC} D) ${optD} E) ${optE} F) ${op
     const s = String(text || "").trim().replace(/^```(?:json)?/i, "").replace(/```\s*$/i, "").trim();
     try { return JSON.parse(s); } catch {}
     const m = s.match(/\{[\s\S]*\}/);
-    if (!m) throw new Error("JSON bulunamadı");
+    if (!m) throw appError("ERR_JSON_BULUNAMADI");
     return JSON.parse(m[0]);
   };
 
@@ -448,13 +670,13 @@ function renderChallengeBox(container, data) {
       allBtns.forEach(b => b.classList.add("disabled"));
       if (letter === correct) {
         btn.classList.add("correct");
-        showToast?.({ title:"Tebrikler!", msg:"Doğru cevap!", kind:"ok" });
+        showToast?.({ id:"AI_CORRECT", kind:"ok" });
       } else {
         btn.classList.add("wrong");
         allBtns.forEach(b => {
           if (b.innerHTML.includes(`<b>${correct})</b>`)) b.classList.add("correct");
         });
-        showToast?.({ title:"Yanlış", msg:"Doğru cevap işaretlendi.", kind:"warn" });
+        showToast?.({ id:"AI_WRONG_MARKED", kind:"warn" });
       }
       if (expBox) expBox.style.display = "block";
     };
@@ -683,7 +905,7 @@ function _renderSubjectSuggestions(items, onApply){
     if (btnApply){
       btnApply.addEventListener("click", () => {
         const val = inp ? String(inp.value || "").trim() : "";
-        if (!val) { showToast({ title:"Bildirim", msg:"Konu boş olamaz.", kind:"warn" }); return; }
+        if (!val) { showToast({ id:"AI_SUBJECT_EMPTY", kind:"warn" }); return; }
         onApply?.({ n: it.n, subject: val });
         row.style.opacity = "0.55";
         btnApply.disabled = true;
@@ -706,13 +928,13 @@ export async function fillMissingSubjectsWithGemini(parsed, {
 } = {}) {
   
   if (!parsed || !Array.isArray(parsed.questions) || !parsed.questions.length) {
-    throw new Error("AI konu tamamlamak için soru bulunamadı.");
+    throw appError("ERR_AI_KONU_TAMAMLAMAK_ICIN_SORU_BULUNAM");
   }
 
   let apiKey = localStorage.getItem("GEMINI_KEY");
   if (!apiKey) {
     apiKey = await requestApiKeyFromModal();
-    if (!apiKey) throw new Error("Gemini API anahtarı girilmedi.");
+    if (!apiKey) throw appError("ERR_GEMINI_API_ANAHTARI_GIRILMEDI_2");
     localStorage.setItem("GEMINI_KEY", apiKey);
   }
 
@@ -789,7 +1011,7 @@ export async function fillMissingSubjectsWithGemini(parsed, {
   });
 
   if (!pending.length){
-    showToast({ title:"AI Konu", msg:`Tamamlandı. Uygulanan: ${applied}`, kind:"ok" });
+    showToast({ id:"AI_SUBJECT_APPLIED", vars:{ applied }, kind:"ok" });
     try { _updateAiSubjectModal({ total, done: total, applied, suggested: 0, status: "Tamamlandı. Öneriler aşağıda." }); } catch {}
     try { _backfillWrongBookSubjectsFromCache(parsed); } catch {}
     try { const srs = document.getElementById("srsModal"); if (srs && srs.style.display !== "none") window.openSrsModal?.(wrongBookDashboard()); } catch {}
@@ -849,7 +1071,7 @@ export async function fillMissingSubjectsWithGemini(parsed, {
   _renderSubjectSuggestions(suggestions, ({ n, subject }) => {
     const q = parsed.questions.find(x => (x.origN ?? x.n) === n);
     if (q) q.subject = subject;
-    showToast({ title:"Konu", msg:`Soru ${n} → ${subject}`, kind:"ok" });
+    showToast({ id:"AI_SUBJECT_SET_FOR_Q", vars:{ n, subject }, kind:"ok" });
     try { refreshSubjectChips(); } catch {}
     try { refreshSubjectChart(); } catch {}
   });
@@ -862,16 +1084,204 @@ export async function fillMissingSubjectsWithGemini(parsed, {
   try { _backfillWrongBookSubjectsFromCache(parsed); } catch {}
   try { const srs = document.getElementById("srsModal"); if (srs && srs.style.display !== "none") window.openSrsModal?.(wrongBookDashboard()); } catch {}
 
-  showToast({
-    title:"AI Konu",
-    msg: cancelled
-      ? `Durduruldu. Uygulanan: ${applied}, Öneri: ${suggested}`
-      : `Tamamlandı. Uygulanan: ${applied}, Öneri: ${suggested}`,
-    kind:"ok"
-  });
-
-  return { applied, suggested, total, cancelled };
+  showToast({ id:"AI_SUBJECT_SUMMARY", vars:{ applied, suggested, status: (cancelled ? msg("LABEL_CANCELLED") : msg("LABEL_DONE")) }, kind:"ok" });
+return { applied, suggested, total, cancelled };
 }
 
 // Testler için (opsiyonel)
 try { window.fillMissingSubjectsWithGemini = fillMissingSubjectsWithGemini; } catch {}
+
+
+// =========================================================
+// PROACTIVE KEY CHECK ON LOGIN (after welcome/version modals)
+// =========================================================
+
+// =========================================================
+// AI KEY NUDGE (Mini modal before asking for key)
+// =========================================================
+function requestAiKeyNudgeModal() {
+  return new Promise((resolve) => {
+    try { setLoading(false); } catch {}
+
+    // If already present, don't nudge
+    const existing = (localStorage.getItem("GEMINI_KEY") || "").trim();
+    if (existing) { resolve(true); return; }
+
+    let ov = document.getElementById("aiKeyNudgeModal");
+    if (!ov) {
+      ov = document.createElement("div");
+      ov.id = "aiKeyNudgeModal";
+      ov.className = "modalOverlay";
+      ov.style.cssText = "display:none; z-index: 10000;";
+
+      ov.innerHTML = `
+        <div class="modalCard" style="max-width: 420px; text-align:center; position:relative;">
+          <button id="btnAiNudgeClose" type="button" aria-label="Kapat" style="position:absolute; top:10px; right:10px; width:34px; height:34px; border-radius:12px;border:1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.06); color:inherit; cursor:pointer;display:flex; align-items:center; justify-content:center; pointer-events:auto;"><span style="font-size:18px; line-height:1; opacity:.9;">✕</span></button>
+          <div style="display:flex; align-items:center; justify-content:center; margin-bottom:10px;">
+            <div class="ai-orb" style="width:56px; height:56px;">
+              <span class="material-icons-round" style="font-size:22px; color:rgba(255,255,255,0.92);">auto_awesome</span>
+            </div>
+          </div>
+
+          <h3 style="margin:0 0 6px; font-size:16px;">AI’ı etkinleştirelim</h3>
+          <div class="modalSub" style="margin:0 auto 12px; max-width: 340px; opacity:.8;">
+            ACUMEN’in AI özellikleri (deneme üretimi, konu tamamlama, tahmini çözüm) için Gemini API anahtarı gerekiyor.
+          </div>
+
+          
+<div class="ai-nudge-checklist">
+  <div class="ai-nudge-item" style="--d:0ms">
+    <div class="ai-nudge-check" aria-hidden="true"></div>
+    <div class="ai-nudge-txt">Deneme üretimi ve çözüm analizi hızlanır</div>
+  </div>
+  <div class="ai-nudge-item" style="--d:120ms">
+    <div class="ai-nudge-check" aria-hidden="true"></div>
+    <div class="ai-nudge-txt">Konu eksiklerini otomatik tamamlar</div>
+  </div>
+  <div class="ai-nudge-item" style="--d:240ms">
+    <div class="ai-nudge-check" aria-hidden="true"></div>
+    <div class="ai-nudge-txt">Anahtar cihazında saklanır (local)</div>
+  </div>
+</div>
+
+<div style="display:flex; justify-content:center; gap:10px; margin-top:6px;">
+            <button id="btnAiNudgeLater" class="btn-secondary" style="min-width:120px;">Sonra</button>
+            <button id="btnAiNudgeNow" class="btn-secondary bad" style="min-width:160px;">Şimdi ekle</button>
+          </div>
+
+          <div style="margin-top:10px; font-size:11px; opacity:.55;">
+            İstersen daha sonra Ayarlar → AI anahtarı bölümünden de ekleyebilirsin.
+          </div>
+        </div>
+      `;
+      document.body.appendChild(ov);
+    }
+
+    const btnNow = ov.querySelector("#btnAiNudgeNow");
+    const btnLater = ov.querySelector("#btnAiNudgeLater");
+    const btnClose = ov.querySelector("#btnAiNudgeClose");
+
+    const cleanup = () => {
+      try { ov.style.display = "none"; ov.setAttribute("aria-hidden","true"); } catch {}
+      try { document.removeEventListener("keydown", onKey, true); } catch {}
+      if (btnNow) btnNow.onclick = null;
+      if (btnLater) btnLater.onclick = null;
+      if (btnClose) btnClose.onclick = null;
+    };
+
+    ov.style.display = "flex";
+    ov.setAttribute("aria-hidden","false");
+
+    const onKey = (ev) => {
+      // Do not allow ESC to close automatically
+      if (ev.key === "Escape") { ev.preventDefault(); ev.stopPropagation(); }
+    };
+    document.addEventListener("keydown", onKey, true);
+
+    if (btnNow) btnNow.onclick = () => { cleanup(); resolve(true); }; 
+    if (btnClose) btnClose.onclick = () => {
+      try { localStorage.setItem(AI_KEY_SNOOZE_UNTIL, String(Date.now() + 60*60*1000)); } catch {}
+      cleanup(); resolve(false);
+    };
+    if (btnLater) btnLater.onclick = () => {
+      try { localStorage.setItem(AI_KEY_SNOOZE_UNTIL, String(Date.now() + 60*60*1000)); } catch {}
+      cleanup(); resolve(false);
+    };
+
+    // Clicking outside should NOT close (explicit action required)
+    ov.onclick = null;
+  });
+}
+
+
+export async function ensureGeminiKeyOnEntry({ minDelayMs = 1200 } = {}) {
+  try{
+    // prevent re-entrancy
+    if (window.__acumenKeyPrompting) return;
+    window.__acumenKeyPrompting = true;
+
+    // If key already exists, nothing to do
+    const existing = (localStorage.getItem("GEMINI_KEY") || "").trim();
+    if (existing) { try { localStorage.removeItem(AI_KEY_SNOOZE_UNTIL); } catch {} ; window.__acumenKeyPrompting = false; return; }
+
+    // Snooze (user clicked later / closed)
+    try {
+      const until = Number(localStorage.getItem(AI_KEY_SNOOZE_UNTIL) || 0);
+      if (until && Date.now() < until) { window.__acumenKeyPrompting = false; return; }
+    } catch {}
+
+    // Give welcome/version modals a chance to appear first
+    if (minDelayMs && minDelayMs > 0) await new Promise(r => setTimeout(r, minDelayMs));
+
+    // Wait until onboarding/version modals are closed (or not present)
+    const isVisible = (id) => {
+      const el = document.getElementById(id);
+      if (!el) return false;
+      const style = window.getComputedStyle(el);
+      return style && style.display !== "none" && style.visibility !== "hidden" && style.opacity !== "0";
+    };
+
+    const waitForClose = async (timeoutMs=30000) => {
+      const start = Date.now();
+      while (Date.now() - start < timeoutMs) {
+        // welcome + update modal
+        const any = isVisible("welcomeModal") || isVisible("updateModal");
+        if (!any) return true;
+        await new Promise(r => setTimeout(r, 250));
+      }
+      return false;
+    };
+
+    await waitForClose(30000);
+
+    // Still no key? show a soft nudge first
+    const go = await requestAiKeyNudgeModal();
+    if (!go) {
+      try { showToast?.({ id: "AI_KEY_MISSING_LIMITED", kind: "warn" }); } catch {}
+    try { localStorage.setItem(AI_KEY_SNOOZE_UNTIL, String(Date.now() + 60*60*1000)); } catch {}
+      window.__acumenKeyPrompting = false;
+      return;
+    }
+
+    // Open key modal
+    const key = await requestApiKeyFromModal();
+    if (key) {
+      localStorage.setItem("GEMINI_KEY", String(key).trim());
+      try { localStorage.removeItem(AI_KEY_SNOOZE_UNTIL); } catch {}
+      try { updateAiKeyBadges(); } catch {}
+      window.__acumenKeyPrompting = false;
+      return;
+    }
+
+    // User canceled: show soft warning (features will be limited)
+    try { showToast?.({ id: "AI_KEY_MISSING_LIMITED", kind: "warn" }); } catch {}
+    try { localStorage.setItem(AI_KEY_SNOOZE_UNTIL, String(Date.now() + 60*60*1000)); } catch {}
+    window.__acumenKeyPrompting = false;
+  } catch (e) {
+    // Never block entry on errors
+    try { console.error(e); } catch {}
+  }
+}
+
+
+// Open AI key setup from user menu / locked buttons
+export async function openAiKeySetup({ skipNudge = true } = {}) {
+  try {
+    // If we want to show the nudge card first, use requestAiKeyNudgeModal()
+    if (!skipNudge) {
+      const go = await requestAiKeyNudgeModal();
+      if (!go) return null;
+    }
+    const key = await requestApiKeyFromModal();
+    if (key) {
+      localStorage.setItem("GEMINI_KEY", String(key).trim());
+      try { localStorage.removeItem(AI_KEY_SNOOZE_UNTIL); } catch {}
+      try { updateAiKeyBadges(); } catch {}
+      return key;
+    }
+    return null;
+  } catch (e) {
+    try { showToast?.(e); } catch {}
+    return null;
+  }
+}

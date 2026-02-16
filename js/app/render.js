@@ -3,6 +3,7 @@
 // This module is intentionally stateful: app.js must call bindRenderContext() once during init.
 
 import { el } from "../utils.js";
+import { appError } from "../ui/uiAlert.js";
 import {
   updateModeUI,
   updateStats,
@@ -25,7 +26,7 @@ export function bindRenderContext(ctx){
 
 function _requireCtx(){
   if (!_ctx || !_ctx.state) {
-    throw new Error("[render] bindRenderContext() çağrılmadı veya ctx.state yok.");
+    throw appError("ERR_RENDER_BINDRENDERCONTEXT_CAGRILMADI");
   }
   return _ctx;
 }
@@ -182,27 +183,67 @@ export function paintAll(){
   const titleEl = document.getElementById("examTitle");
   const metaEl = document.getElementById("examMeta");
 
-  if (state.parsed) {
-    if (titleEl) titleEl.textContent = state.parsed.title || "İsimsiz Sınav";
-    
-    // SVG İkon varsa bas
-    if (iconEl) {
-        const defaultIcon = `<svg viewBox="0 0 24 24" fill="none" style="width:24px;height:24px;"><path d="M14 2H6C4.9 2 4 2.9 4 4V20C4 21.1 4.9 22 6 22H18C19.1 22 20 21.1 20 20V8L14 2Z" fill="#9E9E9E"/><path d="M14 2V8H20" fill="#E0E0E0"/></svg>`;
-        iconEl.innerHTML = state.parsed.meta?.icon || defaultIcon;
-    }
+if (state.parsed) {
 
-    if (metaEl) {
-      const qCount = state.parsed.questions ? state.parsed.questions.length : 0;
-      const keyCount = state.parsed.keyCount || 0;
-      metaEl.textContent = `${qCount} soru • Anahtar: ${keyCount}`;
-    }
-  } else {
-    if (titleEl) titleEl.textContent = "Sınav";
-    if (metaEl) metaEl.textContent = "Hazır olduğunda başlat.";
-    if (iconEl) {
-        iconEl.innerHTML = `<svg viewBox="0 0 24 24" fill="none" style="width:24px;height:24px;"><path d="M14 2H6C4.9 2 4 2.9 4 4V20C4 21.1 4.9 22 6 22H18C19.1 22 20 21.1 20 20V8L14 2Z" fill="#9E9E9E"/><path d="M14 2V8H20" fill="#E0E0E0"/></svg>`;
-    }
+  if (titleEl) {
+    titleEl.textContent = state.parsed.title || "İsimsiz Sınav";
   }
+
+  // SVG ikon
+  if (iconEl) {
+    const defaultIcon = `
+      <svg viewBox="0 0 24 24" fill="none" style="width:24px;height:24px;">
+        <path d="M14 2H6C4.9 2 4 2.9 4 4V20C4 21.1 4.9 22 6 22H18C19.1 22 20 21.1 20 20V8L14 2Z" fill="#9E9E9E"/>
+        <path d="M14 2V8H20" fill="#E0E0E0"/>
+      </svg>
+    `;
+    iconEl.innerHTML = state.parsed.meta?.icon || defaultIcon;
+  }
+
+  if (metaEl) {
+
+  const qCount = state.parsed.questions
+    ? state.parsed.questions.length
+    : 0;
+
+  const keyCount = state.parsed.keyCount || 0;
+  const diff = qCount - keyCount;
+
+  let html = `
+    ${qCount} soru • Anahtar: ${keyCount}
+    <span id="examTimerInline" class="exam-timer-inline">⏱ --:--</span>
+  `;
+
+  // Anahtar eksik uyarısı
+  if (diff > 0) {
+    html += `
+      <span class="answerkey-warning">
+        ⚠ Anahtar eksik (${diff})
+      </span>
+    `;
+  }
+
+  metaEl.innerHTML = html;
+}
+
+
+} else {
+
+  if (titleEl) titleEl.textContent = "Sınav";
+  if (metaEl) metaEl.textContent = "Hazır olduğunda başlat.";
+
+  if (iconEl) {
+    iconEl.innerHTML = `
+      <svg viewBox="0 0 24 24" fill="none" style="width:24px;height:24px;">
+        <path d="M14 2H6C4.9 2 4 2.9 4 4V20C4 21.1 4.9 22 6 22H18C19.1 22 20 21.1 20 20V8L14 2Z" fill="#9E9E9E"/>
+        <path d="M14 2V8H20" fill="#E0E0E0"/>
+      </svg>
+    `;
+  }
+
+}
+
+
 
   // Mobil Scroll Fix
   setTimeout(() => {

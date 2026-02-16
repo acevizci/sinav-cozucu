@@ -2,6 +2,7 @@
 // Deterministic text -> lines pipeline (DOCX/PDF/TXT)
 
 import { normalizeText } from "../utils.js";
+import { appError } from "../ui/uiAlert.js";
 
 
 const RX = {
@@ -123,11 +124,11 @@ export const FileLoader = {
     if (name.endsWith(".txt")) return await file.text();
     if (name.endsWith(".docx")) return await this._readDocx(file);
     if (name.endsWith(".pdf")) return await this._readPdf(file);
-    throw new Error("Desteklenmeyen format. Sadece .txt, .docx, .pdf");
+    throw appError("ERR_DESTEKLENMEYEN_FORMAT_SADECE_TXT_DOC");
   },
 
   async _readDocx(file) {
-    if (typeof mammoth === "undefined") throw new Error("mammoth.js kütüphanesi eksik.");
+    if (typeof mammoth === "undefined") throw appError("ERR_MAMMOTH_JS_KUTUPHANESI_EKSIK");
     const buf = await file.arrayBuffer();
     const result = await mammoth.convertToHtml({ arrayBuffer: buf });
     const html = result.value || "";
@@ -170,7 +171,7 @@ export const FileLoader = {
   },
 
   async _readPdf(file) {
-    if (typeof pdfjsLib === "undefined") throw new Error("pdf.js kütüphanesi eksik.");
+    if (typeof pdfjsLib === "undefined") throw appError("ERR_PDF_JS_KUTUPHANESI_EKSIK");
     if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
       pdfjsLib.GlobalWorkerOptions.workerSrc =
         "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";

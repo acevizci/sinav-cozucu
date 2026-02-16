@@ -41,12 +41,27 @@ export function createTimer({ onTick, onDone }){
       setTextSafe("timer", t1);
       setTextSafe("focusTimer", t1);
       setTextSafe("hudT", t1);
+	  setTextSafe("examTimerInline", `⏱ ${t1}`);
 
-      const timerEl = el("timer");
-      if (timerEl){
-        if (next <= 10) timerEl.style.color = "#fecaca";
-        else if (next <= 30) timerEl.style.color = "#fde68a";
-      }
+     const ids = ["timer", "focusTimer", "hudT", "examTimerInline"];
+
+ids.forEach(id => {
+  const t = el(id);
+  if (!t) return;
+
+  // renkler
+  if (next <= 10) t.style.color = "#fecaca";
+  else if (next <= 30) t.style.color = "#fde68a";
+  else t.style.color = "";
+
+  // 🔥 son 5 saniye pulse
+  if (next <= 5 && next > 0) {
+    t.classList.add("timer-pulse");
+  } else {
+    t.classList.remove("timer-pulse");
+  }
+});
+
 
       onTick?.(next);
 

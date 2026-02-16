@@ -1,3 +1,4 @@
+import { appError } from "./ui/uiAlert.js";
 /* ================= GAMIFICATION (OYUN & PATİ) ================= */
 
 /* ===============================================================
@@ -474,7 +475,7 @@ function onCorrectFirstTimeLevelProgress(delta=1){
     const text = _fallbackLine("levelUp", { lv: newLv });
     PatiSpeech.trySpeak(text, 3000, { priority: 80, globalCooldownMs: 150 });
 
-    try { showToast?.({ title:"Pati", msg:`Level atladın! LVL ${newLv}`, kind:"ok" }); } catch {}
+    try { showToast?.({ id:"PATI_LEVEL_UP", vars:{ lvl: newLv }, kind:"ok" }); } catch {}
     if (window.confetti) confetti({ particleCount: 60, spread: 55, origin: { y: 0.7 } });
   }
   _setLevelXp(xp);
@@ -501,7 +502,7 @@ function recordSolvedForToday(firstTime = true){
     const text = _fallbackLine("goalDone", { goal, solved });
     PatiSpeech.trySpeak(text, 3500, { priority: 90, globalCooldownMs: 150 });
 
-    try { showToast?.({ title:"Günlük Hedef", msg:`${goal} soru tamamlandı!`, kind:"ok" }); } catch {}
+    try { showToast?.({ id:"PATI_DAILY_GOAL", vars:{ goal }, kind:"ok" }); } catch {}
     if (window.confetti) confetti({ particleCount: 120, spread: 70, origin: { y: 0.6 } });
   } else {
     const hit =
@@ -532,7 +533,7 @@ function recordSolvedForToday(firstTime = true){
     const text = _fallbackLine("streakUp", { streak });
     PatiSpeech.trySpeak(text, 3500, { priority: 85, globalCooldownMs: 150 });
 
-    try { showToast?.({ title:"Streak", msg:`Seri: ${streak} gün (10 soru/gün)`, kind:"ok" }); } catch {}
+    try { showToast?.({ id:"PATI_STREAK", vars:{ streak }, kind:"ok" }); } catch {}
   }
 
   updateDailyStreakUI();
@@ -632,7 +633,7 @@ window.PatiManager = {
 
   feed: function() {
     if (this.foodStock <= 0) {
-      alert("Stokta mama yok! Sınav çözerek kazanmalısın. 🥺");
+      window.showToast?.({id:"PATI_NO_FOOD", kind:"warn"}); if(!window.showToast) (window.showWarn?.({ id:"PATI_NO_FOOD", vars: {} })) || console.warn(window.uiMsg ? window.uiMsg("PATI_NO_FOOD", {}) : "");
       return;
     }
     if (this.satiety >= 100) {
@@ -1162,10 +1163,10 @@ export function startPatiMotivation() {
 
       // KOTA KORUMA: açsa daha çok fallback
       const fallbackChance = ctx.sat < 30 ? 0.45 : 0.25;
-      if (Math.random() < fallbackChance) throw new Error("Random fallback");
+      if (Math.random() < fallbackChance) throw appError("ERR_RANDOM_FALLBACK");
 
       const aiText = await fetchPatiMessageFromAI(ctx.name, ctx.lv, "genel");
-      if (!aiText) throw new Error("AI boş");
+      if (!aiText) throw appError("ERR_AI_BOS");
       textToDisplay = aiText;
     } catch {
       // yedek sözler de template’li (dinamik)

@@ -4,6 +4,7 @@
 
 import { regenerateOneQuestion } from "./practiceGenerator.js";
 import { buildSourcesPayloadFromIds } from "./notesStore.js";
+import { appError } from "../ui/uiAlert.js";
 
 function $(sel, root=document){ return root.querySelector(sel); }
 function $all(sel, root=document){ return Array.from(root.querySelectorAll(sel)); }
@@ -130,12 +131,12 @@ export function initInExamRegenerate(ctx){
 
       const meta = getPracticeMeta(state.parsed);
       const target = extractQuestionPayload(state.parsed, n);
-      if (!target) throw new Error("Soru bulunamadı.");
+      if (!target) throw appError("ERR_SORU_BULUNAMADI");
 
       setLoading?.(true, "Soru yeniden üretiliyor…");
 
       const sources = await buildSourcesPayloadFromIds(meta.sourceIds);
-      if (!sources.length) throw new Error("Kaynak not bulunamadı (sourceIds boş).");
+      if (!sources.length) throw appError("ERR_KAYNAK_NOT_BULUNAMADI_SOURCEIDS_BOS");
 
       const res = await regenerateOneQuestion({
         attemptNo: meta.attemptNo,
@@ -149,7 +150,7 @@ export function initInExamRegenerate(ctx){
       });
 
       const ok = applyRegeneratedQuestionToParsed(state.parsed, res);
-      if (!ok) throw new Error("Soru güncellenemedi.");
+      if (!ok) throw appError("ERR_SORU_GUNCELLENEMEDI");
 
       // Clear existing answer for that question
       try{
@@ -164,10 +165,10 @@ export function initInExamRegenerate(ctx){
 
       paintAll?.();
       persist?.();
-      showToast?.({ title: "Güncellendi", msg: `Soru ${n} yenilendi.`, kind: "ok" });
+      showToast?.({ id: "PRACTICE_Q_REGENERATED", vars: { n }, kind: "ok" });
     }catch(e){
       console.error(e);
-      ctx.showToast?.({ title: "Hata", msg: e?.message || "Soru yenilenemedi.", kind: "bad" });
+      ctx.showToast?.({ id: "PRACTICE_Q_REGENERATE_FAILED", vars: { reason: (e?.message || "Soru yenilenemedi.") }, kind: "bad" });
     }finally{
       ctx.setLoading?.(false);
     }

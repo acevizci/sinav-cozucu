@@ -1,4 +1,5 @@
 import { bindGlobals } from "./globals.js";
+import { bindGlobal as bindAlertGlobals } from "../ui/uiAlert.js";
 import { bindFileInput, bindKeyboard } from "./bindings.js";
 import { bindDraw } from "./draw.js";
 import { bindCtrlWheelZoom } from "./wheel-zoom.js";
@@ -7,6 +8,7 @@ import { render } from "./render.js";
 import { updateQuestionList } from "./sidebar.js";
 import { renderOverlays } from "./overlays.js";
 
+bindAlertGlobals();
 bindGlobals();
 bindUxGlobals();
 bindShortcutsModal();

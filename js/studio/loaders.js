@@ -2,16 +2,17 @@ import { State } from "./state.js";
 import { Dom } from "./dom.js";
 import { toast, updateZoomUI } from "./ui.js";
 import { render } from "./render.js";
+import { appError } from "../ui/uiAlert.js";
 
 export async function loadFromFile(file){
   const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
   if (isPdf) return loadPdf(file);
   if (file.type.startsWith("image/")) return loadImage(file);
-  throw new Error("Desteklenmeyen dosya tipi.");
+  throw appError("ERR_DESTEKLENMEYEN_DOSYA_TIPI");
 }
 
 export async function loadPdf(file){
-  if (typeof pdfjsLib === "undefined") throw new Error("pdf.js yüklenemedi");
+  if (typeof pdfjsLib === "undefined") throw appError("ERR_PDF_JS_YUKLENEMEDI");
   toast("PDF", "Yükleniyor…");
 
   const arrayBuffer = await file.arrayBuffer();
@@ -43,7 +44,7 @@ export async function loadImage(file){
   img.src = URL.createObjectURL(file);
   await new Promise((res, rej) => {
     img.onload = () => res();
-    img.onerror = () => rej(new Error("Resim okunamadı"));
+    img.onerror = () => rej(appError("ERR_RESIM_OKUNAMADI"));
   });
 
   State.img = img;

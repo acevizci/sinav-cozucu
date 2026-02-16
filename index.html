@@ -10,13 +10,51 @@
   <script src="https://unpkg.com/mammoth/mammoth.browser.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
   
-<script type="module" src="js/auth.js"></script>
+	<script type="module" src="js/debug.js"></script>
+	<script type="module" src="js/auth.js"></script>
 
   <link rel="stylesheet" href="./styles.css" />
+
+  <style>
+    /* a11y helpers */
+    .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;}
+    .nav-item:focus-visible{outline:2px solid rgba(168,85,247,.85); outline-offset:2px;}
+  </style>
+
   <script src="https://accounts.google.com/gsi/client" async defer></script>
+<style>
+  /* --- Collapsible (details/summary) – modern + accessible --- */
+  .adv-settings{margin-top:10px;border:1px solid var(--stroke);border-radius:14px;background:var(--glass);overflow:hidden;}
+  .adv-summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;font-weight:800;}
+  .adv-summary::-webkit-details-marker{display:none;}
+  .adv-title{font-size:12px;letter-spacing:.2px;color:var(--text);font-weight:900;}
+  .adv-hint{font-size:10.5px;color:var(--muted);font-weight:700;}
+  .adv-body{padding:10px 12px 12px;}
+  .adv-settings[open]{border-color:rgba(168,85,247,.22); box-shadow:0 0 0 1px rgba(168,85,247,.10) inset;}
+  .adv-settings[open] .adv-hint{color:rgba(168,85,247,.85);}
+  .adv-body .switches-grid{margin-top:2px;}
+
+  /* --- Mini Template Studio card --- */
+  .template-section--mini{margin-top:12px;padding:12px;border-radius:16px;background:var(--glass);border:1px solid var(--stroke);
+    display:flex;align-items:center;justify-content:space-between;gap:12px;}
+  .ts-mini-left{display:flex;align-items:center;gap:10px;min-width:0;}
+  .ts-mini-ico{width:34px;height:34px;border-radius:12px;display:flex;align-items:center;justify-content:center;
+    background:rgba(168,85,247,.14);border:1px solid rgba(168,85,247,.20);}
+  .ts-mini-text{min-width:0;}
+  .ts-mini-title{font-size:12px;font-weight:900;color:var(--text);letter-spacing:.2px;}
+  .ts-mini-sub{font-size:10.5px;color:var(--muted);font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px;}
+  .ts-mini-right{display:flex;align-items:center;gap:10px;flex-shrink:0;}
+  .ts-mini-badge{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;
+    background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.22);color:var(--text);font-size:11px;font-weight:900;}
+  .ts-mini-badge .material-icons-round{font-size:16px;line-height:1;}
+  .ts-mini-btn{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:12px;
+    border:1px solid rgba(168,85,247,.28);background:rgba(168,85,247,.18);color:var(--text);
+    font-weight:900;font-size:12px;cursor:pointer;transition:.15s ease;}
+  .ts-mini-btn:hover{transform:translateY(-1px);background:rgba(168,85,247,.26);border-color:rgba(168,85,247,.52);}
+  .ts-mini-btn .material-icons-round{font-size:16px;line-height:1;}
+</style>
 </head>
 
 <body>
@@ -38,7 +76,7 @@
             <div class="avatar-glow"></div>
         </div>
         
-        <h1 class="app-title">ACUMEN <span style="font-size:12px; color:#a855f7; vertical-align: super;">v1.2</span></h1>
+        <h1 class="app-title">ACUMEN <span style="font-size:12px; color:#a855f7; vertical-align: super;">v1.3</span></h1>
         <p id="welcomeMsg" class="app-subtitle">Pati seni bekliyor...</p>
 
         <button id="btnLoginGoogle" class="google-btn">
@@ -65,7 +103,7 @@
       <div class="title-group">
         <div style="display:flex; align-items:center; gap:8px;">
             <h1>ACUMEN</h1>
-            <span class="version-badge">v1.2</span>
+            <span class="version-badge">v1.3</span>
         </div>
         <div class="sub">Akıllı Çok Zeki Kişisel Sınav Asistanı :)</div>
       </div>
@@ -92,10 +130,15 @@
         </div>
 
         <div id="userDropdown" class="glass-dropdown">
+            <div class="dropdown-item" id="btnAiKey">
+                <span class="item-icon">✨</span>
+                <span class="item-text">AI Anahtarı</span>
+            </div>
             <div class="dropdown-item" id="btnLogout">
                 <span class="item-icon">🚪</span>
-               
+                <span class="item-text">Çıkış</span>
             </div>
+        </div>
         </div>
     </div>
 
@@ -124,16 +167,29 @@
   <div class="scrollable-content">
       
     <div class="input-section">
-      <div class="nav-pills">
-        <button class="nav-item active" onclick="switchTab('file', this)">📂 Dosya Yükle</button>
-        <button class="nav-item" onclick="switchTab('text', this)">📋 Metin Yapıştır</button>
-        <button class="nav-item" onclick="switchTab('drive', this)">☁️ Drive</button>
-        <button class="nav-item" onclick="switchTab('notes', this)">📚 Notlar</button>
-      </div>
+      <div class="nav-pills" role="tablist" aria-label="Kaynak seçimi">
+  <button class="nav-item active" type="button" role="tab"
+          id="tabbtn-file" aria-selected="true" aria-controls="tab-file" data-tab="file">
+    <span class="nav-ico" aria-hidden="true">📂</span><span>Dosya</span>
+  </button>
+  <button class="nav-item" type="button" role="tab"
+          id="tabbtn-text" aria-selected="false" aria-controls="tab-text" data-tab="text">
+    <span class="nav-ico" aria-hidden="true">📋</span><span>Metin</span>
+  </button>
+  <button class="nav-item" type="button" role="tab"
+          id="tabbtn-drive" aria-selected="false" aria-controls="tab-drive" data-tab="drive">
+    <span class="nav-ico" aria-hidden="true">☁️</span><span>Drive</span>
+  </button>
+  <button class="nav-item" type="button" role="tab"
+          id="tabbtn-notes" aria-selected="false" aria-controls="tab-notes" data-tab="notes">
+    <span class="nav-ico" aria-hidden="true">📚</span><span>Notlar</span>
+  </button>
+</div>
 
-      <div id="tab-file" class="tab-content active">
+      <div id="tab-file" class="tab-content active" role="tabpanel" aria-labelledby="tabbtn-file">
         <label class="modern-dropzone">
-          <input id="fileInput" type="file" accept=".docx,.txt,.pdf" hidden />
+          <input id="fileInput" type="file" accept=".docx,.txt,.pdf" aria-describedby="fileHelp" hidden />
+          <div id="fileHelp" class="sr-only">DOCX, TXT veya PDF yükleyebilirsin.</div>
           <div class="dz-content">
             <div class="dz-icon-circle">☁️</div>
             <div class="dz-main-text">Dosyayı Buraya Bırak</div>
@@ -143,13 +199,14 @@
         </label>
       </div>
 
-      <div id="tab-text" class="tab-content" style="display:none;">
+      <div id="tab-text" class="tab-content" style="display:none;" role="tabpanel" aria-labelledby="tabbtn-text">
+        <label for="pasteArea" class="sr-only">Metin yapıştır</label>
         <textarea id="pasteArea" class="glass-input" placeholder="Soruları buraya yapıştır..."></textarea>
 		
 		
       </div>
 	  
-<div id="tab-drive" class="tab-content driveX" style="display:none;">
+<div id="tab-drive" class="tab-content driveX" style="display:none;" role="tabpanel" aria-labelledby="tabbtn-drive">
   <div class="driveX-card">
     <div class="driveX-top">
       <div class="driveX-title">
@@ -160,7 +217,7 @@
         </div>
       </div>
 
-      <button id="btnDriveList" class="driveX-cta">Listele</button>
+      <button id="btnDriveList" class="driveX-cta">Dosyaları Getir</button>
     </div>
 
     <div class="driveX-seg" role="tablist" aria-label="Drive source">
@@ -169,12 +226,12 @@
     </div>
 
     <div id="driveFolderRow" class="driveX-row" style="display:none;">
-      <input id="inpDriveFolder" class="driveX-input" placeholder="Klasör linki veya ID" />
+      <input id="inpDriveFolder" class="driveX-input" placeholder="Klasör linki veya ID" aria-label="Drive klasör linki veya ID" />
     </div>
 
     <div class="driveX-row">
-      <input id="inpDriveFilter" class="driveX-input" placeholder="Dosya ara…" />
-      <button id="btnDriveClear" class="driveX-icon" type="button" title="Temizle">✕</button>
+      <input id="inpDriveFilter" class="driveX-input" placeholder="Dosya ara…" aria-label="Drive dosyalarında ara" />
+      <button id="btnDriveClear" class="driveX-icon" type="button" title="Temizle" aria-label="Arama filtresini temizle">✕</button>
     </div>
 
     <div id="driveList" class="driveX-list" aria-label="Drive files"></div>
@@ -186,7 +243,9 @@
   </div>
 </div>
 
-<div id="tab-notes" class="tab-content" style="display:none;">
+<div id="tab-notes" class="tab-content" style="display:none;" role="tabpanel" aria-labelledby="tabbtn-notes">
+    <div id="notesErrorBox" class="drive-error-box" style="display:none;"></div>
+
   <div class="panel-left-inner">
     
     <div class="tools-grid-compact">
@@ -196,7 +255,7 @@
     </div>
 
     <div class="divider-line"></div>
-
+		
     <div class="list-section">
       <div class="between" style="margin-bottom: 8px;">
         <span class="sec-title">Kütüphanem (<span id="notesSelCount">0</span>)</span>
@@ -204,8 +263,11 @@
           <button id="btnNotesSelectAll" class="text-link">Tümünü Seç</button>
           <button id="btnNotesClearSel" class="text-link warn">Temizle</button>
         </div>
+		
       </div>
       <div id="notesList" class="notesList" style="max-height: 200px; overflow-y: auto;"></div>
+	  
+
     </div>
 
     <div id="historySection" class="list-section" style="margin-top: 15px; border-top: 1px dashed var(--stroke); padding-top: 12px; display: none;">
@@ -242,35 +304,34 @@
         ✨ DENEME ÜRET
       </button>
     </div>
-
+	
   </div>
 </div>
 
-	  
-	 <div class="template-section">
-    <div class="ts-header">
-       
-        <div class="ts-titles">
-            <h4>Şablon Stüdyosu</h4>
-            <small>Karmaşık PDF'ler için</small>
+     <div class="template-section template-section--mini" aria-label="Şablon Stüdyosu">
+      <div class="ts-mini-left">
+        <div class="ts-mini-ico" aria-hidden="true">🧩</div>
+        <div class="ts-mini-text">
+          <div class="ts-mini-title">Şablon Stüdyosu</div>
+          <div class="ts-mini-sub">Karmaşık PDF’lerden soru işaretle</div>
         </div>
-    </div>
+      </div>
 
-    <div class="ts-actions">
-        <div id="template-active-badge" class="ts-badge active-badge" style="display: none;">
-            <span class="material-icons-round">Alınan Soru</span>
-            <span>Aktif</span>
-        </div>
+      <div class="ts-mini-right">
+        <span id="template-active-badge" class="ts-mini-badge" style="display: none;" aria-label="Alınan soru aktif">
+          <span class="material-icons-round" aria-hidden="true">check_circle</span>
+          <span>Aktif</span>
+        </span>
 
-        <button id="btn-open-studio" class="ts-btn">
-           
-            <span>Oluştur</span>
+        <button id="btn-open-studio" class="ts-mini-btn" type="button" aria-label="Şablon Stüdyosu aç">
+          
+          <span>Oluştur</span>
         </button>
-    </div>
-</div>
+      </div>
     </div>
 
     <div class="config-section">
+
       <div class="config-title">SINAV AYARLARI</div>
       
       <div class="config-row">
@@ -278,7 +339,14 @@
         <input id="durationMin" type="number" class="glass-input small" min="1" max="600" value="20">
       </div>
 
-      <div class="switches-grid">
+      
+      <details class="adv-settings" id="advSettings">
+        <summary class="adv-summary">
+          <span class="adv-title">Gelişmiş ayarlar</span>
+          <span class="adv-hint">Focus • Karıştırma • Otomasyon</span>
+        </summary>
+        <div class="adv-body">
+          <div class="switches-grid">
         <label class="switch-card" title="Dikkati dağıtan öğeleri gizle">
           <input id="focusMode" type="checkbox">
           <span class="slider"></span>
@@ -303,7 +371,9 @@
           <span class="label">Şık Karıştır</span>
         </label>
       </div>
-    </div>
+        </div>
+      </details>
+</div>
 
     <div class="main-actions">
       <button id="btnStart" class="btn-hero primary" disabled>
@@ -320,13 +390,22 @@
       <button id="btnAiSolve" class="btn-ai-magic">
         <span>🤖</span> AI ile Tahmini Çöz
       </button>
-      <div class="ai-hint">Anahtar yoksa yapay zeka devreye girer.</div>
+      <div class="ai-hint" style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
+        <span>Anahtar yoksa yapay zeka devreye girer.</span>
+        <span id="aiReadyBadge" class="ai-ready-badge" style="display:none;">✅ AI hazır</span>
+      </div>
     </div>
 
     <div class="divider-line"></div>
 
 <div class="tools-section">
-  <div class="config-title" style="margin-bottom:12px;">🛠 ARAÇLAR & ANALİZ</div>
+  <details class="adv-settings tools-collapsible" id="toolsCollapsible">
+    <summary class="adv-summary">
+      <span class="adv-title">🛠 Araçlar & Analiz</span>
+      <span class="adv-hint">Yanlışlar • SRS • Rapor</span>
+    </summary>
+    <div class="adv-body">
+      
   
   <div class="tools-grid-modern">
     <button id="btnWrongMode" class="tool-card purple-glow">
@@ -362,12 +441,12 @@
       <span>⚠️ Sıfırla</span>
     </button>
   </div>
+
+    </div>
+  </details>
 </div>
 
-  </div> <div class="timer-footer">
-    <div class="timer-label">KALAN SÜRE</div>
-    <div id="timer" class="timer-digital">--:--</div>
-  </div>
+  </div> 
 
 </section>
 
@@ -380,6 +459,7 @@
       <div>
         <h2 id="examTitle">Sınav</h2>
         <div id="examMeta" class="exam-meta">Hazır olduğunda başlat.</div>
+
       </div>
     </div>
 
@@ -445,26 +525,74 @@
 
 
 </main>
+<script>
+  window.dlog = window.dlog || function(...args){
+    try { console.log(...args); } catch(e) {}
+  };
+</script>
 
 <script type="module" src="./js/app.js"></script>
 
 <script>
+  // Accessible Tabs (replaces inline onclick; keeps switchTab() for compatibility)
   function switchTab(tab, btnEl){
-    // active button
-    document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
-    if (btnEl) btnEl.classList.add('active');
+    const tablist = document.querySelector('.nav-pills[role="tablist"]') || document.querySelector('.nav-pills');
+    if (!tablist) return;
 
-    // panels
-    const file = document.getElementById('tab-file');
-    const text = document.getElementById('tab-text');
-    const drive = document.getElementById('tab-drive');
-    const notes = document.getElementById('tab-notes');
+    const buttons = Array.from(tablist.querySelectorAll('.nav-item'));
+    const panels = {
+      file: document.getElementById('tab-file'),
+      text: document.getElementById('tab-text'),
+      drive: document.getElementById('tab-drive'),
+      notes: document.getElementById('tab-notes'),
+    };
 
-    if (file) file.style.display = (tab === 'file') ? 'block' : 'none';
-    if (text) text.style.display = (tab === 'text') ? 'block' : 'none';
-    if (drive) drive.style.display = (tab === 'drive') ? 'block' : 'none';
-    if (notes) notes.style.display = (tab === 'notes') ? 'block' : 'none';
+    buttons.forEach(b=>{
+      const isActive = (b.dataset && b.dataset.tab) ? (b.dataset.tab === tab) : (b === btnEl);
+      b.classList.toggle('active', isActive);
+      b.setAttribute('aria-selected', isActive ? 'true' : 'false');
+      b.tabIndex = isActive ? 0 : -1;
+    });
+
+    Object.entries(panels).forEach(([k, el])=>{
+      if (!el) return;
+      el.style.display = (k === tab) ? 'block' : 'none';
+    });
   }
+
+  (function initTabs(){
+    const tablist = document.querySelector('.nav-pills[role="tablist"]');
+    if (!tablist) return;
+
+    tablist.addEventListener('click', (e)=>{
+      const btn = e.target.closest('.nav-item[role="tab"]');
+      if (!btn) return;
+      switchTab(btn.dataset.tab, btn);
+      btn.focus();
+    });
+
+    tablist.addEventListener('keydown', (e)=>{
+      const keys = ['ArrowLeft','ArrowRight','Home','End'];
+      if (!keys.includes(e.key)) return;
+
+      const tabs = Array.from(tablist.querySelectorAll('.nav-item[role="tab"]'));
+      const current = document.activeElement.closest('.nav-item[role="tab"]') || tabs[0];
+      let idx = Math.max(0, tabs.indexOf(current));
+
+      if (e.key === 'ArrowLeft') idx = (idx - 1 + tabs.length) % tabs.length;
+      if (e.key === 'ArrowRight') idx = (idx + 1) % tabs.length;
+      if (e.key === 'Home') idx = 0;
+      if (e.key === 'End') idx = tabs.length - 1;
+
+      e.preventDefault();
+      tabs[idx].focus();
+      // auto-activate on focus (more user-friendly here)
+      switchTab(tabs[idx].dataset.tab, tabs[idx]);
+    });
+
+    const active = tablist.querySelector('.nav-item.active') || tablist.querySelector('.nav-item[role="tab"]');
+    if (active) switchTab(active.dataset.tab || 'file', active);
+  })();
 
   // File input label update (existing behavior)
   const fileInp = document.getElementById('fileInput');
@@ -610,7 +738,13 @@
 <div id="apiKeyModal" class="modalOverlay" style="display:none; z-index: 10000;">
   <div class="modalCard" style="max-width: 400px;">
     <div class="modalTop">
-      <h3>🔑 Gemini API Anahtarı</h3>
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; width:100%;">
+        <div>
+          <h3 style="margin:0;">🔑 Gemini API Anahtarı</h3>
+          <div id="aiKeyStatusPill" class="ai-key-status" style="display:none;">Durum: —</div>
+        </div>
+        <span id="aiKeyStatusDot" style="display:none; width:10px; height:10px; border-radius:99px; background:rgba(255,255,255,0.35);"></span>
+      </div>
     </div>
     <div style="padding: 15px 0; color: #ccc; font-size: 14px; line-height: 1.5;">
       Yapay zeka özelliklerini kullanmak için Google'dan aldığın ücretsiz API anahtarını girmen gerekiyor.
@@ -803,6 +937,23 @@
     });
   })();
   </script>
+
+<!-- Şablon Stüdyo - İşaretlenen Soru Önizleme Modalı -->
+<div id="qPreviewModal" class="modalOverlay" style="display:none" aria-hidden="true">
+  <div class="modalCard" style="width:min(900px, 100%); padding:16px;">
+    <div class="modalTop" style="align-items:center; margin-bottom:10px;">
+      <div>
+        <div id="qPreviewTitle" class="modalTitle">İşaretlenen Görsel</div>
+        <div class="modalSub">Şablon Stüdyo’da işaretlediğin soru görseli</div>
+      </div>
+      <button id="qPreviewClose" class="modalClose" title="Kapat" aria-label="Kapat">✕</button>
+    </div>
+    <div style="border:1px solid var(--stroke); border-radius:18px; overflow:hidden; background:#0b0d14;">
+      <img id="qPreviewImg" alt="İşaretlenen soru görseli" style="display:block; width:100%; height:auto; max-height:70vh; object-fit:contain;"/>
+    </div>
+  </div>
+</div>
+
 <div class="security-side-tab modern-sst">
   <div class="sst-visible">
     <span class="sst-icon">🛡️</span>

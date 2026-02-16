@@ -1,5 +1,8 @@
 import { downloadBlob } from "../utils.js";
 import { getPatiLevel, _getStreak } from "../pati.js";
+import { msg } from "../ui.js";
+import { appError } from "../ui/uiAlert.js";
+import { openAiKeySetup } from "../ui/ai.js";
 
 
 function __getSubject(q) {
@@ -31,7 +34,7 @@ function syncGlobals() {
 
 export function bindEvents(ctx = {}) {
   const state = ctx.state || window.__APP_STATE;
-  if (!state) throw new Error("bindEvents: state missing");
+  if (!state) throw appError("ERR_BINDEVENTS_STATE_MISSING");
 
   const el = ctx.el || (id => document.getElementById(id));
 
@@ -88,8 +91,8 @@ const btnAiSubjects = el("btnAiSubjects");
 if (btnAiSubjects){
   btnAiSubjects.onclick = async () => {
     try{
-      if (!state?.parsed?.questions?.length) return showWarn("Önce sınavı yükle.");
-      if (typeof window.fillMissingSubjectsWithGemini !== "function") return showWarn("AI konu modülü bulunamadı (ui.js).");
+      if (!state?.parsed?.questions?.length) return showWarn({id:"EXAM_LOAD_FIRST"});
+      if (typeof window.fillMissingSubjectsWithGemini !== "function") return showWarn({id:"AI_SUBJECT_MODULE_MISSING"});
 
       btnAiSubjects.disabled = true;
       await window.fillMissingSubjectsWithGemini(state.parsed, {
@@ -100,7 +103,7 @@ if (btnAiSubjects){
       });
     }catch(e){
       console.error(e);
-      showWarn(e?.message || "AI konu tamamlama hatası");
+      showWarn(e?.message || {id:"AI_SUBJECT_FILL_ERROR"});
     }finally{
       btnAiSubjects.disabled = false;
     }
@@ -113,7 +116,7 @@ if (btnAiSubjects){
 async function runAiSolve(){
   if (!state.parsed) return;
   try {
-    setLoading(true, "AI cevap anahtarı üretiliyor…");
+    setLoading(true, { id:"AI_KEY_LOADING" });
 
     const totalQ = state.parsed?.questions?.length || 0;
     const existing = state.parsed.answerKey || {};
@@ -128,12 +131,12 @@ async function runAiSolve(){
     state.parsed.meta.keySource = "ai";
     state.parsed.meta.keyCoverage = totalQ ? (state.parsed.keyCount / totalQ) : 0;
 
-    showToast?.({ title:"AI", msg:`Anahtar üretildi: ${state.parsed.keyCount}/${totalQ}`, kind:"ok" });
+    showToast?.({ id:"AI_KEY_CREATED", vars:{ done: state.parsed.keyCount, total: totalQ }, kind:"ok" });
     paintAll();
     persist();
   } catch (e) {
     console.error(e);
-    showToast?.({ title:"AI", msg: (e?.message || "AI anahtar üretilemedi"), kind:"warn" });
+    showToast?.({ id:"AI_KEY_FAILED", vars:{ reason: (e?.message || msg("AI_KEY_FAILED_DEFAULT")) }, kind:"warn" });
   } finally {
     setLoading(false);
   }
@@ -166,7 +169,7 @@ el("pasteArea")?.addEventListener("input", () => {
 });
 safeBind("btnWrongMode", () => {
   const base = buildWrongOnlyParsed({ limit: 80, onlyDue: true, fallbackAll: true });
-  if (!base) return showWarn("Yanlış Defteri boş");
+  if (!base) return showWarn({id:"WRONG_BOOK_EMPTY"});
   state.parsed = applyShuffle(base, { shuffleQ:true, shuffleO:true });
   state.mode="prep";
   state.answers.clear();
@@ -187,7 +190,7 @@ safeBind("btnSrsDash", () => {
 safeBind("btnExportWrongBook", () => {
   const data = exportWrongBook();
   if (!data || !data.items || data.items.length === 0) {
-    showWarn("Yanlış defterin tamamen boş.");
+    showWarn({id:"WRONG_BOOK_ALL_EMPTY"});
     return;
   }
 
@@ -203,7 +206,7 @@ safeBind("btnExportWrongBook", () => {
   });
 
   if (onlyWrongs.length === 0) {
-    showWarn("Analiz edilecek hatalı soru bulunamadı.");
+    showWarn({id:"WRONGS_NOT_FOUND_FOR_ANALYSIS"});
     return;
   }
 
@@ -237,7 +240,7 @@ safeBind("btnExportWrongBook", () => {
 
   const reportItems = Array.from(uniq.values());
   if (reportItems.length === 0) {
-    showWarn("Analiz edilecek hatalı soru bulunamadı.");
+    showWarn({id:"WRONGS_NOT_FOUND_FOR_ANALYSIS"});
     return;
   }
 
@@ -631,7 +634,7 @@ safeBind("btnExportWrongBook", () => {
     </html>`;
 
   downloadBlob(fullHtml, `Acumen_Strateji_${now.replace(/\./g,'_')}.html`, "text/html");
-  showToast({ title: "Başarılı", msg: "Yeni tasarım hazır!", kind: "ok" });
+  showToast({ id:"STRATEGY_EXPORT_READY", kind:"ok" });
 });
 
 
@@ -645,11 +648,7 @@ safeBind("btnClearWrongBook", () => {
   paintAll();
   
   // Senin özel Toast sistemin devreye giriyor:
-  window.showToast?.({ 
-    title: "TEMİZLENDİ", 
-    msg: "Yanlış Defteri başarıyla sıfırlandı. 🧽", 
-    kind: "ok" 
-  });
+  window.showToast?.({ id:"WRONGBOOK_CLEARED", kind:"ok" });
 });
 
 
@@ -658,11 +657,7 @@ safeBind("btnClearSave", () => {
   // Tarayıcı onay kutusunu (confirm) buradan da kaldırdık.
   window.clearSaved?.({ force: true, reason: "user" });
   
-  window.showToast?.({ 
-    title: "SİLİNDİ", 
-    msg: "Tüm yerel veriler temizlendi. 🧨", 
-    kind: "bad" 
-  });
+  window.showToast?.({ id:"LOCALDATA_CLEARED", kind:"bad" });
 });
 
 
@@ -779,92 +774,113 @@ attachKeyboardShortcuts(state,(q,l)=>{
 
 
 
-// ================= ÖZEL ÇIKIŞ MODALI BAĞLANTISI (app.js en altı) =================
 
-const btnLogout = document.getElementById("btnLogout");
-const logoutModal = document.getElementById("logoutModal");
-const btnCancel = document.getElementById("btnCancelLogout");
-const btnConfirm = document.getElementById("btnConfirmLogout");
 
-if (btnLogout) {
-    btnLogout.onclick = function(e) {
-        e.preventDefault(); 
-        if (logoutModal) logoutModal.style.display = "flex";
-    };
+// ================= USER MENU: AI ANAHTARI (GUARANTEE ITEM EXISTS) =================
+function ensureAiKeyMenuItem() {
+  try {
+    const dropdown = document.getElementById("userDropdown");
+    const logout = document.getElementById("btnLogout");
+    if (!dropdown || !logout) return;
+
+    let aiBtn = document.getElementById("btnAiKey");
+    if (aiBtn) return;
+
+    aiBtn = document.createElement("div");
+    aiBtn.className = "dropdown-item";
+    aiBtn.id = "btnAiKey";
+    aiBtn.innerHTML = `
+      <span class="item-icon">✨</span>
+      <span class="item-text">AI Anahtarı</span>
+    `;
+    dropdown.insertBefore(aiBtn, logout);
+  } catch {}
+}
+ensureAiKeyMenuItem();
+
+// ================= ÇIKIŞ ONAY MODALI (TEK MERKEZ) =================
+
+const uiAiKeyBtn = document.getElementById("btnAiKey");
+const uiUserMenuWrap = document.querySelector(".user-menu-wrapper");
+if (uiAiKeyBtn) {
+  uiAiKeyBtn.addEventListener("click", async (e) => {
+    e.preventDefault();
+    try { uiUserMenuWrap?.classList?.remove("active"); } catch {}
+    try { await openAiKeySetup({ skipNudge: false }); } catch {}
+  });
 }
 
-if (btnCancel) {
-    btnCancel.onclick = function() {
-        if (logoutModal) logoutModal.style.display = "none";
-    };
-}
-
-if (btnConfirm) {
-    btnConfirm.onclick = function() {
-        localStorage.removeItem("isLoggedIn");
-        localStorage.removeItem("user_name");
-        window.location.reload();
-    };
-}
-
-window.addEventListener("click", function(e) {
-    if (e.target === logoutModal) logoutModal.style.display = "none";
-});
-
-/* ================= ÖZEL ÇIKIŞ MODALI BAĞLANTISI (FİNAL TEMİZ) ================= */
-
-// 1. Elemanları Seç
 const uiLogoutBtn = document.getElementById("btnLogout");
 const uiLogoutModal = document.getElementById("logoutModal");
 const uiCancelBtn = document.getElementById("btnCancelLogout");
 const uiConfirmBtn = document.getElementById("btnConfirmLogout");
 
-// 2. Çıkış Butonuna Tıklanınca Modalı AÇ
+// Modal hiçbir koşulda kendiliğinden açık kalmasın
+if (uiLogoutModal) uiLogoutModal.style.display = "none";
+
+function openLogoutModal() {
+  if (!uiLogoutModal) return;
+  uiLogoutModal.style.display = "flex";
+}
+
+function closeLogoutModal() {
+  if (!uiLogoutModal) return;
+  uiLogoutModal.style.display = "none";
+}
+
+// Çıkış butonu: SADECE modal açar
 if (uiLogoutBtn) {
-    uiLogoutBtn.onclick = function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        if (uiLogoutModal) {
-             uiLogoutModal.style.display = "flex";
-        }
-    };
+  uiLogoutBtn.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    openLogoutModal();
+  });
 }
 
-// 3. Vazgeç Butonu
+// Vazgeç
 if (uiCancelBtn) {
-    uiCancelBtn.onclick = function() {
-        if (uiLogoutModal) uiLogoutModal.style.display = "none";
-    };
+  uiCancelBtn.addEventListener("click", (e) => {
+    e.preventDefault();
+    closeLogoutModal();
+  });
 }
 
-// 4. "EVET, ÇIKIŞ YAP" BUTONU
+// Evet, çıkış yap
 if (uiConfirmBtn) {
-    uiConfirmBtn.onclick = async function() {
-        // Butonu pasif yap ve yazıyı değiştir
-        uiConfirmBtn.textContent = "Çıkılıyor...";
-        uiConfirmBtn.disabled = true;
+  uiConfirmBtn.addEventListener("click", async (e) => {
+    e.preventDefault();
 
-        try {
-            // Firebase çıkışını bekle
-            if (window.auth && window.signOut) {
-                await window.signOut(window.auth);
-            }
-        } catch (e) {
-            console.error("Çıkış işlemi sırasında sessiz hata:", e);
-        }
-        
-        // Her durumda yerel veriyi temizle ve yenile
-        localStorage.removeItem("isLoggedIn");
-        localStorage.removeItem("user_name");
-        window.location.reload();
-    };
+    const prevLabel = uiConfirmBtn.textContent;
+    uiConfirmBtn.textContent = "Çıkılıyor...";
+    uiConfirmBtn.disabled = true;
+
+    try {
+      // Tercih: auth.js içinde tanımlı merkezi signOut
+      if (typeof window.acumenSignOut === "function") {
+        await window.acumenSignOut();
+      } else if (window.auth && window.signOut) {
+        await window.signOut(window.auth);
+      }
+    } catch (err) {
+      console.error("Çıkış işlemi sırasında hata:", err);
+    }
+
+    // Her durumda yerel veriyi temizle ve yenile
+    try {
+      localStorage.removeItem("isLoggedIn");
+      localStorage.removeItem("user_name");
+    } catch (_) {}
+    window.location.reload();
+
+    // (reload olmazsa) UI restore
+    uiConfirmBtn.textContent = prevLabel;
+    uiConfirmBtn.disabled = false;
+  });
 }
 
-// 5. Pencere Dışına Tıklanınca Kapat
-window.addEventListener("click", function(e) {
-    if (e.target === uiLogoutModal) {
-        uiLogoutModal.style.display = "none";
-    }
+// Dışarı tıklayınca kapat
+window.addEventListener("click", (e) => {
+  if (e.target === uiLogoutModal) closeLogoutModal();
 });
 
 /* =========================================
@@ -916,7 +932,7 @@ uiSendReport?.addEventListener("click", async (e) => {
   const message = uiReportText?.value.trim() || "";
 
   if (!message) {
-    window.showToast?.("Lütfen bir mesaj yaz şampiyon! 😊", "warn");
+    window.showToast?.({id:"REPORT_EMPTY", kind:"warn"});
     return;
   }
 
@@ -946,16 +962,16 @@ uiSendReport?.addEventListener("click", async (e) => {
 
     if (!response.ok) {
       console.error("Formspree hata:", response.status, data);
-      throw new Error((data && data.error) ? data.error : "Formspree yanıt vermedi.");
+      throw appError("ERR_REPORT_SEND_FAILED", { status: response.status, details: (data && data.error) ? data.error : "" });
     }
 
-    window.showToast?.("Raporun e-postana uçtu! 🕵️‍♂️", "success");
+    window.showToast?.({id:"REPORT_SENT", kind:"ok"});
     closeModal();
     if (uiReportText) uiReportText.value = "";
 
   } catch (err) {
     console.error("Gönderim hatası:", err);
-    window.showToast?.("Gönderilemedi, tekrar dene.", "error");
+    window.showToast?.({id:"REPORT_FAILED", kind:"bad"});
   } finally {
     uiSendReport.textContent = "Gönder Gitsin! 🚀";
     uiSendReport.disabled = false;
@@ -965,67 +981,9 @@ uiSendReport?.addEventListener("click", async (e) => {
 
 
 /* =========================================
-   1. GÜNCELLENMİŞ TOAST FONKSİYONU (AKILLI & İKONLU)
+   Toast sistemi artık js/ui/uiAlert.js tarafından yönetiliyor.
+   (window.showToast vb. global binding app.js içinde yapılır.)
    ========================================= */
-window.showToast = function(input, typeArg = 'neutral') {
-    const host = document.getElementById('toastHost');
-    if (!host) return;
-
-    // 1. Gelen veriyi ayrıştır (String mi, Object mi?)
-    let msg = '';
-    let type = typeArg;
-    let title = null; // Başlığı henüz atamıyoruz, türe göre seçeceğiz
-
-    if (typeof input === 'object' && input !== null) {
-        // Obje geldiyse ({ title: "...", msg: "...", kind: "ok" })
-        msg = input.msg || input.message || '';
-        title = input.title || null; // Eğer özel başlık varsa al
-        
-        // Kind -> Type Dönüşümü (Eski kodlarla uyum için)
-        const k = input.kind || 'neutral';
-        if (k === 'ok' || k === 'success') type = 'success';
-        else if (k === 'bad' || k === 'error') type = 'error';
-        else if (k === 'warn' || k === 'warning') type = 'warn';
-        else type = 'neutral';
-    } else {
-        // Düz yazı geldiyse
-        msg = String(input);
-    }
-
-    // 2. Başlık Yoksa Türe Göre Otomatik Ata (Büyük Harfle - Şık Durur)
-    if (!title) {
-        if (type === 'success') title = 'BAŞARILI';
-        else if (type === 'error') title = 'HATA';
-        else if (type === 'warn') title = 'DİKKAT';
-        else title = 'BİLDİRİM';
-    }
-
-    // 3. İkon Seçimi
-    let icon = 'ℹ️'; // Varsayılan
-    if (type === 'success') icon = '✅'; // İstersen '🎉' de yapabilirsin
-    if (type === 'error') icon = '🛑';
-    if (type === 'warn') icon = '⚠️';
-
-    // 4. HTML Oluştur (Başlık + Gövde Yapısı)
-    const div = document.createElement('div');
-    div.className = `toast-msg ${type}`;
-    
-    div.innerHTML = `
-        <div class="toast-head">${title}</div>
-        <div class="toast-body">
-            <span class="toast-icon">${icon}</span>
-            <span class="toast-text">${msg}</span>
-        </div>
-    `;
-
-    host.appendChild(div);
-
-    // 5. Animasyon ve Silme
-    setTimeout(() => {
-        div.classList.add('hiding');
-        div.addEventListener('animationend', () => div.remove());
-    }, 3500);
-};
 
 /* =========================================
    2. RAPOR GÖNDERME (DEPRECATED - FIREBASE KALDIRILDI)
@@ -1119,7 +1077,7 @@ examData.keyCount = Object.keys(reindexedKey).length;
 
 
     if (!isValidTemplatePayload(examData)) {
-      showWarn?.("⚠️ Şablon verisi geçersiz/eksik geldi.");
+      showWarn?.({id:"TEMPLATE_INVALID"});
       return;
     }
 
@@ -1202,16 +1160,17 @@ syncGlobals();
     paintAll();
     persist();
 
-    showToast?.({ title:"Şablon", msg:`${state.parsed.questions.length} soru yüklendi.`, kind:"ok" });
+    showToast?.({ id:"TEMPLATE_Q_LOADED", vars:{ count: state.parsed.questions.length }, kind:"ok" });
 
     const as = el("autoStart");
     if (as && as.checked) startExam();
 
   } catch (e){
     console.error(e);
-    showWarn?.(e?.message || "Şablon entegrasyonu hatası");
+    showWarn?.(e?.message || {id:"TEMPLATE_INTEGRATION_ERROR"});
   }
 });
+
 
 
 
@@ -1224,6 +1183,37 @@ syncGlobals();
     statusEl.textContent = msg || "";
     statusEl.classList.toggle("err", !!isErr);
   };
+
+const driveErrorBox = document.getElementById("driveErrorBox");
+
+function showDriveAuthError(){
+  if (!driveErrorBox) return;
+
+  driveErrorBox.innerHTML = `
+    <div class="drive-error-card">
+      <div class="drive-error-icon">⚠️</div>
+      <div class="drive-error-text">
+        <div class="drive-error-title">Drive bağlantısı süresi doldu</div>
+        <div class="drive-error-desc">
+          Google oturumu geçersiz. Lütfen tekrar bağlanın.
+        </div>
+      </div>
+      <button class="drive-error-btn" id="btnReconnectDrive">
+        Yeniden Bağlan
+      </button>
+    </div>
+  `;
+
+  driveErrorBox.style.display = "block";
+
+  document.getElementById("btnReconnectDrive")?.addEventListener("click", () => {
+    btnList?.click(); // mevcut listeleme akışını tekrar tetikle
+  });
+}
+
+function clearDriveError(){
+  if (driveErrorBox) driveErrorBox.style.display = "none";
+}
 
   const LS_LAST_FOLDER = "acumen_drive_last_folder";
 
@@ -1468,17 +1458,53 @@ syncGlobals();
       driveRenderList(__driveItems);
       setDriveStatus(`${files.length} öğe bulundu.`);
 
-    } catch (e) {
-      console.error(e);
-      setDriveStatus("Hata: " + (e?.message || "Bilinmeyen hata"), true);
-      
-      // Hata olduysa stack'ten son eklenen hatalı klasörü çıkarıp bir geri gel
-      if (navigationStack.length > 1) {
-          navigationStack.pop();
-          renderBreadcrumbs();
-          // Bir önceki klasörü yeniden yüklemeyi deneyebiliriz veya kullanıcıya bırakabiliriz.
-      }
-    }
+} catch (e) {
+  console.error(e);
+
+  // Google API error formatları:
+  // 1) { error: { code: 401, status: "UNAUTHENTICATED", message: "..." } }
+  // 2) { status: 401, message: "..." }
+  // 3) message içinde "401" / "UNAUTHENTICATED" geçebilir
+  const code =
+    e?.error?.code ??
+    e?.status ??
+    e?.code ??
+    null;
+
+  const statusText = String(e?.error?.status || "");
+  const msgText = String(e?.error?.message || e?.message || "");
+
+  const is401 =
+    code === 401 ||
+    statusText === "UNAUTHENTICATED" ||
+    /401|Invalid Credentials|UNAUTHENTICATED/i.test(msgText);
+
+  if (is401) {
+    // ✅ Tema uyumlu glass kart (senin CSS classlarını kullanır)
+    // Not: msg'i kısa ve kullanıcı dostu tutuyoruz
+    showDriveAuthError?.(
+      "Google Drive oturumun geçersiz veya süresi dolmuş. Lütfen yeniden bağlan."
+    );
+
+    // status satırı (toast basıyorsa burada çağırma)
+    setDriveStatus?.("Drive: yeniden giriş gerekli", true);
+
+  } else {
+    // ✅ Genel hata: kartı kapat, status'a kısa mesaj yaz
+    clearDriveError?.();
+    setDriveStatus?.("Drive hata: " + (msgText || "Bilinmeyen hata"), true);
+  }
+
+  // Hata olduysa stack'ten son eklenen hatalı klasörü çıkarıp bir geri gel
+  if (navigationStack.length > 1) {
+    navigationStack.pop();
+    renderBreadcrumbs();
+    // İstersen burada önceki klasörü otomatik yükleyebilirsin:
+    // await loadFolder(navigationStack[navigationStack.length - 1]?.id);
+  }
+}
+
+
   }
 
   // ---- 9. Buton Aksiyonları ----
@@ -1492,11 +1518,7 @@ syncGlobals();
     if(!folderInput) {
       // confirm veya alert yerine senin toast sistemin:
       if(window.showToast) {
-        window.showToast({ 
-          title: "EKSİK BİLGİ", 
-          msg: "Lütfen Klasör ID girin! 📂", 
-          kind: "warn" 
-        });
+        window.showToast({ id:"DRIVE_FOLDER_ID_REQUIRED", kind:"warn" });
       }
       return;
     }
@@ -1527,7 +1549,7 @@ syncGlobals();
   btnOpen.addEventListener("click", async () => {
     // Seçim kontrolü
     if (!__driveSelected) {
-        if(window.showToast) window.showToast("Lütfen bir dosya seçin.", "warn");
+        if(window.showToast) window.showToast({ id:"FILE_SELECT_FIRST", kind:"warn" });
         return;
     }
 
@@ -1554,11 +1576,11 @@ syncGlobals();
           if (typeof doParse === 'function') {
               await doParse({ autoStartHint: true });
           } else {
-              throw new Error("doParse fonksiyonu bulunamadı.");
+              throw appError("ERR_DOPARSE_FONKSIYONU_BULUNAMADI");
           }
           
           setDriveStatus("Hazır. Normal akışa geçildi.");
-          if(window.showToast) window.showToast({ title:"Drive", msg:"Kitapçık yüklendi", kind:"ok" });
+          if(window.showToast) window.showToast({ id:"DRIVE_BOOKLET_UPLOADED", kind:"ok" });
 
         } catch (parseErr) {
             console.error("Parse hatası:", parseErr);
@@ -1583,7 +1605,7 @@ syncGlobals();
     } catch (e){
       console.error(e);
       setDriveStatus(e?.message || "Drive yükleme hatası", true);
-      if(window.showWarn) window.showWarn(e?.message || "Drive hatası");
+      if(window.showWarn) window.showWarn(e?.message || {id:"DRIVE_ERROR_GENERIC"});
     }
   });
 

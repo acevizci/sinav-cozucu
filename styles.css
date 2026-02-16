@@ -2576,7 +2576,7 @@ body.sepia-mode .btn-logout-header {
 .modern-dropzone {
     border: 2px dashed rgba(255,255,255,0.15);
     border-radius: 16px;
-    padding: 25px 10px;
+    padding: 10px 10px;
     text-align: center;
     cursor: pointer;
     transition: all 0.3s ease;
@@ -2591,8 +2591,14 @@ body.sepia-mode .btn-logout-header {
 
 /* Metin Alanı */
 .glass-input {
-    width: 100%; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.1);
-    color: #fff; padding: 10px; border-radius: 10px; font-family: inherit;
+	border: 2px dashed rgba(255,255,255,0.15);
+    border-radius: 16px;
+    padding: 10px 10px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: block;
+    background: rgba(255,255,255,0.01);
 }
 .glass-input:focus { border-color: #a855f7; outline: none; }
 textarea.glass-input { min-height: 80px; resize: vertical; }
@@ -2655,6 +2661,30 @@ input:checked ~ .label { color: #fff; }
     font-size: 12px; font-weight: bold; cursor: pointer;
 }
 .ai-hint { font-size: 10px; color: #888; text-align: center; margin-top: 4px; }
+
+/* AI key readiness badge (Settings + quick actions) */
+.ai-ready-badge{
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: .2px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(72,187,120,0.35);
+  background: rgba(72,187,120,0.12);
+  color: rgba(230,255,240,0.92);
+  white-space: nowrap;
+}
+
+.ai-key-status{
+  margin-top: 6px;
+  font-size: 12px;
+  opacity: .9;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.06);
+  width: fit-content;
+}
 
 /* Tools Chips */
 .tools-grid-compact { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-bottom: 10px; }
@@ -5711,4 +5741,578 @@ body.sepia-mode .notesPriority{ background: rgba(91,70,54,0.04); }
     justify-content: space-between;
     align-items: center;
     padding: 4px 0;
+}
+
+/* ================= Şablon Stüdyo Preview Butonu ================= */
+.qPreviewBtn{
+  height:22px;
+  min-width:22px;
+  padding:0 6px;
+
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,.14);
+  background:rgba(255,255,255,.06);
+
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+
+  font-size:12px;
+  line-height:1;
+  color:rgba(255,255,255,.85);
+
+  cursor:pointer;
+  transition:.15s ease;
+}
+
+/* Preview varsa: mor vurgulu, ama şık */
+.qPreviewBtn--has{
+  background:rgba(168,85,247,.18);
+  border-color:rgba(168,85,247,.45);
+  box-shadow:0 0 0 1px rgba(168,85,247,.12) inset;
+}
+
+/* Hafif pulse: 2 tur sonra dursun (rahatsız etmesin) */
+.qPreviewBtn--has{
+  animation:qPreviewPulse 1.2s ease-out 2;
+}
+
+@keyframes qPreviewPulse{
+  0%   { box-shadow:0 0 0 0 rgba(168,85,247,.0), 0 0 0 1px rgba(168,85,247,.12) inset; }
+  50%  { box-shadow:0 0 0 6px rgba(168,85,247,.12), 0 0 0 1px rgba(168,85,247,.18) inset; }
+  100% { box-shadow:0 0 0 0 rgba(168,85,247,.0), 0 0 0 1px rgba(168,85,247,.12) inset; }
+}
+
+.qPreviewBtn:hover{
+  background:rgba(168,85,247,.28);
+  border-color:rgba(168,85,247,.65);
+  color:#fff;
+  transform:translateY(-1px);
+}
+
+/* ================================
+   THEME-AWARE GLASS TOKENS
+================================ */
+:root{
+  --accent: rgba(168,85,247,1);
+  --accent-12: rgba(168,85,247,.12);
+  --accent-18: rgba(168,85,247,.18);
+  --accent-26: rgba(168,85,247,.26);
+  --accent-45: rgba(168,85,247,.45);
+
+  --glass-bg: rgba(255,255,255,.06);
+  --glass-border: rgba(255,255,255,.12);
+  --glass-bg-hover: rgba(168,85,247,.14);
+  --glass-border-hover: rgba(168,85,247,.45);
+
+  --text-strong: rgba(244,244,245,.92);
+  --text-muted: rgba(244,244,245,.66);
+
+  /* sticky gradient vars */
+  --sticky-grad-1: rgba(10,10,14,0);
+  --sticky-grad-2: rgba(10,10,14,.75);
+  --sticky-grad-3: rgba(10,10,14,.92);
+  --sticky-grad-4: rgba(10,10,14,.98);
+}
+
+/* Eğer temayı body attribute/class ile set ediyorsan bu selectorlerden biri tutar.
+   Projede hangisi varsa o çalışır; diğerleri zarar vermez. */
+body[data-theme="light"], body.theme-light, html[data-theme="light"]{
+  --glass-bg: rgba(10,10,14,.04);
+  --glass-border: rgba(10,10,14,.10);
+  --glass-bg-hover: rgba(168,85,247,.10);
+  --glass-border-hover: rgba(168,85,247,.35);
+
+  --text-strong: rgba(10,10,14,.92);
+  --text-muted: rgba(10,10,14,.62);
+
+  --sticky-grad-1: rgba(248,248,252,0);
+  --sticky-grad-2: rgba(248,248,252,.70);
+  --sticky-grad-3: rgba(248,248,252,.86);
+  --sticky-grad-4: rgba(248,248,252,.94);
+}
+
+body[data-theme="book"], body.theme-book, html[data-theme="book"]{
+  /* “kitap” için sıcak açık tonlar */
+  --glass-bg: rgba(80,60,30,.06);
+  --glass-border: rgba(80,60,30,.14);
+  --glass-bg-hover: rgba(168,85,247,.10);
+  --glass-border-hover: rgba(168,85,247,.38);
+
+  --text-strong: rgba(32,24,18,.92);
+  --text-muted: rgba(32,24,18,.62);
+
+  --sticky-grad-1: rgba(250,244,232,0);
+  --sticky-grad-2: rgba(250,244,232,.70);
+  --sticky-grad-3: rgba(250,244,232,.86);
+  --sticky-grad-4: rgba(250,244,232,.94);
+}
+
+/* ================================
+   TOP NAV PILLS - GLASS + PURPLE HOVER
+================================ */
+.nav-pills{
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-radius: 14px;
+  padding: 6px;
+  gap: 6px;
+}
+
+.nav-item{
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  border-radius: 12px;
+  padding: 8px 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: transform .15s ease, background .15s ease, border-color .15s ease, box-shadow .15s ease, color .15s ease;
+}
+
+.nav-item:hover{
+  background: var(--glass-bg-hover);
+  border-color: var(--glass-border-hover);
+  color: var(--text-strong);
+  box-shadow: 0 0 0 1px var(--accent-12) inset, 0 10px 30px rgba(168,85,247,.12);
+  transform: translateY(-1px);
+}
+
+.nav-item.active{
+  background: var(--accent-18);
+  border-color: var(--accent-45);
+  color: var(--text-strong);
+  box-shadow: 0 0 0 1px rgba(168,85,247,.14) inset;
+}
+
+/* ================================
+   STICKY FOOTER - THEME AWARE
+================================ */
+.panel-sticky-footer{
+  background: linear-gradient(
+    to bottom,
+    var(--sticky-grad-1),
+    var(--sticky-grad-2) 18%,
+    var(--sticky-grad-3) 46%,
+    var(--sticky-grad-4)
+  );
+  border-top: 1px solid var(--glass-border);
+}
+
+/* ================================
+   COLLAPSIBLE (GELİŞMİŞ / ARAÇLAR) - GLASS + HOVER
+================================ */
+.adv-settings{
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.adv-summary{
+  color: var(--text-strong);
+}
+
+.adv-settings:hover{
+  border-color: var(--glass-border-hover);
+}
+
+.adv-settings[open]{
+  border-color: var(--glass-border-hover);
+  box-shadow: 0 0 0 1px var(--accent-12) inset;
+}
+
+.btn-secondary:hover,
+.btn-hero:hover,
+.driveX-cta:hover,
+.driveX-primary:hover{
+  border-color: var(--glass-border-hover) !important;
+  box-shadow: 0 0 0 1px var(--accent-12) inset, 0 10px 30px rgba(168,85,247,.10);
+}
+
+
+/* ==========================================================
+   ACUMEN • Theme-aware Purple Glass Hover (non-sticky update)
+   - Nav pills hover glow (purple)
+   - Details/collapsible headers (advanced/tools) hover glow
+   - Works with: default (dark), .light-mode, .sepia-mode, .book-theme
+   ========================================================== */
+
+/* Purple accent tokens (independent from theme --accent) */
+:root{
+  --ac-purple: #a855f7;
+  --ac-purple-08: rgba(168,85,247,.08);
+  --ac-purple-12: rgba(168,85,247,.12);
+  --ac-purple-18: rgba(168,85,247,.18);
+  --ac-purple-26: rgba(168,85,247,.26);
+  --ac-purple-45: rgba(168,85,247,.45);
+  --ac-purple-65: rgba(168,85,247,.65);
+}
+
+/* ---------- NAV PILLS (Dosya/Metin/Drive/Notlar) ---------- */
+/* ==============================
+   NAV PILL FIX (TEXT OVERFLOW)
+   ============================== */
+
+.nav-pills{
+  display: flex;
+  gap: 6px;
+}
+
+.nav-item{
+  flex: 1;               /* hepsi eşit genişlik */
+  min-width: 0;          /* flex overflow fix */
+  justify-content: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+
+/* ikon + text hizalama */
+.nav-item span{
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+
+.nav-item:hover{
+  background: var(--ac-purple-12);
+  border-color: var(--ac-purple-45);
+  color: var(--text);
+  box-shadow:
+    0 0 0 1px var(--ac-purple-12) inset,
+    0 10px 28px rgba(168,85,247,.14);
+  transform: translateY(-1px);
+}
+
+.nav-item.active{
+  background: linear-gradient(135deg, var(--ac-purple-26), rgba(99,102,241,.22));
+  border-color: var(--ac-purple-65);
+  color: var(--text);
+  box-shadow: 0 0 0 1px rgba(168,85,247,.18) inset;
+}
+
+/* Light / Sepia / Book: keep glow but softer text contrast */
+body.light-mode .nav-item,
+body.sepia-mode .nav-item,
+body.book-theme .nav-item{
+  color: var(--muted);
+}
+body.light-mode .nav-item:hover,
+body.sepia-mode .nav-item:hover,
+body.book-theme .nav-item:hover{
+  box-shadow: 0 8px 18px rgba(168,85,247,.12);
+}
+body.light-mode .nav-item.active,
+body.sepia-mode .nav-item.active,
+body.book-theme .nav-item.active{
+  box-shadow: 0 0 0 1px rgba(168,85,247,.16) inset;
+}
+
+/* ---------- Collapsible (Gelişmiş / Araçlar) ---------- */
+/* Works for both native <details> (adv-settings) and any collapsible-header class */
+.adv-settings,
+.tools-collapsible{
+  background: var(--glass);
+  border: 1px solid var(--stroke);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.adv-summary{
+  cursor: pointer;
+  transition: background .15s ease, border-color .15s ease, box-shadow .15s ease, transform .15s ease;
+}
+
+.adv-settings:hover .adv-summary,
+.tools-collapsible:hover .adv-summary{
+  background: var(--ac-purple-08);
+}
+
+.adv-settings:hover,
+.tools-collapsible:hover{
+  border-color: var(--ac-purple-45);
+  box-shadow: 0 0 0 1px var(--ac-purple-12) inset;
+}
+
+.adv-settings[open],
+.tools-collapsible[open]{
+  border-color: var(--ac-purple-45);
+  box-shadow: 0 0 0 1px var(--ac-purple-12) inset;
+}
+
+/* Legacy collapsible header hover (if used elsewhere) */
+.collapsible-header{
+  transition: background .15s ease, border-color .15s ease, box-shadow .15s ease, transform .15s ease;
+}
+.collapsible-header:hover{
+  background: var(--ac-purple-08);
+  border-color: var(--ac-purple-45);
+  box-shadow: 0 0 0 1px var(--ac-purple-12) inset;
+  transform: translateY(-1px);
+}
+
+/* ---------- Premium micro-hover for primary buttons (non-sticky) ---------- */
+.btn-hero.primary:hover:not(:disabled),
+.ts-btn:hover,
+.driveX-cta:hover,
+.driveX-primary:hover{
+  border-color: var(--ac-purple-45);
+  box-shadow: 0 0 0 1px var(--ac-purple-12) inset, 0 10px 28px rgba(168,85,247,.12);
+  transform: translateY(-1px);
+}
+
+/* Ensure disabled buttons don't look "broken" across themes */
+.btn-hero:disabled,
+.btn-secondary:disabled{
+  opacity: .55;
+  filter: grayscale(.15);
+}
+
+/* Focus ring (consistent) */
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible{
+  outline: 2px solid rgba(168,85,247,.85);
+  outline-offset: 2px;
+}
+
+/* ==============================
+   PANEL VISUAL RHYTHM • MODERN
+   ============================== */
+
+.input-section,
+.template-section--mini,
+.config-section,
+.main-actions,
+.tools-section{
+  position: relative;
+  background: linear-gradient(
+      180deg,
+      rgba(255,255,255,0.03),
+      rgba(255,255,255,0.01)
+  );
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 16px;
+  padding: 14px;
+  margin-bottom: 14px;
+
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+
+  box-shadow:
+    0 1px 0 rgba(255,255,255,0.04) inset,
+    0 12px 30px rgba(0,0,0,0.25);
+
+  transition: transform .18s ease, box-shadow .18s ease;
+}
+
+/* subtle hover lift */
+.input-section:hover,
+.template-section--mini:hover,
+.config-section:hover,
+.tools-section:hover{
+  transform: translateY(-2px);
+  box-shadow:
+    0 1px 0 rgba(255,255,255,0.06) inset,
+    0 18px 40px rgba(0,0,0,0.35);
+}
+
+/* ==============================
+   HERO ACTION (BAŞLAT BLOĞU)
+   ============================== */
+
+.main-actions{
+  background:
+    radial-gradient(
+      circle at 20% 20%,
+      rgba(168,85,247,0.18),
+      transparent 60%
+    ),
+    linear-gradient(
+      135deg,
+      rgba(168,85,247,.08),
+      rgba(99,102,241,.06)
+    );
+
+  border: 1px solid rgba(168,85,247,.28);
+
+  box-shadow:
+    0 0 0 1px rgba(168,85,247,.12) inset,
+    0 20px 50px rgba(168,85,247,.25);
+}
+
+
+.drive-error-box{
+  margin-top:10px;
+}
+
+.drive-error-card{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  padding:12px;
+  border-radius:14px;
+  background:var(--glass);
+  border:1px solid rgba(239,68,68,.35);
+  backdrop-filter:blur(12px);
+}
+
+.drive-error-title{
+  font-weight:800;
+  font-size:13px;
+  color:var(--text);
+}
+
+.drive-error-desc{
+  font-size:12px;
+  color:var(--muted);
+}
+
+.drive-error-btn{
+  margin-left:auto;
+  padding:6px 10px;
+  border-radius:10px;
+  border:1px solid rgba(168,85,247,.4);
+  background:rgba(168,85,247,.15);
+  color:var(--text);
+  cursor:pointer;
+}
+
+/* Notlar sekmesinde uyarı, Drive'daki konuma uyum */
+#tab-notes #notesErrorBox.drive-error-box{
+  margin-top: 8px;
+  margin-bottom: 10px;
+}
+
+
+/* =========================
+   AI Lock (no key / invalid)
+   ========================= */
+.ai-locked{
+  opacity: .65 !important;
+  cursor: not-allowed !important;
+  filter: grayscale(0.15);
+}
+.ai-locked:hover{
+  transform: none !important;
+}
+.ai-locked:active{
+  transform: none !important;
+}
+
+
+/* ================= AI NUDGE CHECKLIST (premium) ================= */
+
+.ai-nudge-checklist{
+  text-align:left;
+  background:rgba(255,255,255,0.04);
+  border:1px solid rgba(255,255,255,0.08);
+  border-radius:14px;
+  padding:10px 12px;
+  margin: 0 0 14px;
+}
+.ai-nudge-item{
+  display:flex;
+  gap:10px;
+  align-items:flex-start;
+  padding: 7px 6px;
+  border-radius: 12px;
+  opacity: 0;
+  transform: translateY(6px);
+  animation: aiNudgeItemIn .28s ease forwards;
+  animation-delay: var(--d, 0ms);
+}
+.ai-nudge-item + .ai-nudge-item{ margin-top: 2px; }
+.ai-nudge-item:hover{
+  background: rgba(255,255,255,0.05);
+}
+.ai-nudge-check{
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  flex: 0 0 18px;
+  background: rgba(52, 211, 153, 0.14);
+  border: 1px solid rgba(52, 211, 153, 0.34);
+  box-shadow: 0 0 0 1px rgba(0,0,0,0.22) inset;
+  margin-top: 2px;
+}
+.ai-nudge-check::before{
+  content:"✓";
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  color: rgba(52, 211, 153, 0.95);
+  transform: translateY(-0.5px);
+}
+.ai-nudge-txt{
+  font-size:12.5px;
+  opacity:.92;
+  line-height:1.25;
+}
+@keyframes aiNudgeItemIn{
+  to{ opacity:1; transform: translateY(0); }
+}
+
+
+.answerkey-warning{
+  margin-left:10px;
+  padding:3px 8px;
+  font-size:12px;
+  font-weight:600;
+  border-radius:8px;
+
+  color:#ffc857;
+  background:rgba(255,200,87,0.12);
+  border:1px solid rgba(255,200,87,0.35);
+
+  display:inline-flex;
+  align-items:center;
+  gap:4px;
+}
+
+.answerkey-warning.hidden{
+  display:none;
+}
+
+.exam-timer-inline{
+  margin-left:10px;
+  font-weight:700;
+  font-size:12px;
+  color:#d4d4d8;
+  background:rgba(255,255,255,0.06);
+  border:1px solid rgba(255,255,255,0.12);
+  padding:3px 8px;
+  border-radius:8px;
+}
+
+.answerkey-warning{
+  margin-left:8px;
+  padding:3px 8px;
+  font-size:12px;
+  font-weight:600;
+  border-radius:8px;
+  color:#ffc857;
+  background:rgba(255,200,87,0.12);
+  border:1px solid rgba(255,200,87,0.35);
+}
+
+@keyframes timerPulse {
+  0%   { transform: scale(1); opacity: 1; }
+  50%  { transform: scale(1.08); opacity: 0.85; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.timer-pulse {
+  animation: timerPulse 0.8s ease-in-out infinite;
 }

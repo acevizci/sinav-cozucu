@@ -31,7 +31,7 @@ export function installSrsBridge(ctx = {}) {
   window.startSrsBySubject = function startSrsBySubject(subject, opts = {}) {
     const st = state || window.__APP_STATE;
     if (!st) {
-      showWarn?.("Uygulama state yok (window.__APP_STATE).");
+      showWarn?.({id:"APP_STATE_MISSING"});
       return;
     }
 
@@ -40,7 +40,7 @@ export function installSrsBridge(ctx = {}) {
 
     const base = buildWrongOnlyParsed?.({ limit, onlyDue: true, fallbackAll: true });
     if (!base?.questions?.length) {
-      showWarn?.("Yanlış Defteri boş");
+      showWarn?.({id:"WRONG_BOOK_EMPTY"});
       return;
     }
 
@@ -53,7 +53,7 @@ export function installSrsBridge(ctx = {}) {
     }
 
     if (!qs.length) {
-      showWarn?.(`"${sub}" için tekrar sorusu yok.`);
+      showWarn?.({id:"SRS_NO_QUESTIONS_FOR_SUBJECT", vars:{sub}});
       return;
     }
 
@@ -73,6 +73,6 @@ export function installSrsBridge(ctx = {}) {
     try { paintAll?.(); } catch {}
     try { persist?.(); } catch {}
 
-    showToast?.({ title: "SRS", msg: `"${sub}" tekrarı hazır (${qs.length} soru)`, kind: "ok" });
+    showToast?.({ id:"SRS_READY_FOR_SUBJECT", vars:{ sub, count: qs.length }, kind:"ok" });
   };
 }
