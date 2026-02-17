@@ -10,12 +10,16 @@
   <script src="https://unpkg.com/mammoth/mammoth.browser.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
   
 	<script type="module" src="js/debug.js"></script>
 	<script type="module" src="js/auth.js"></script>
 
-  <link rel="stylesheet" href="./styles.css" />
+  <link rel="stylesheet" href="styles.css">
+
+
 
   <style>
     /* a11y helpers */
@@ -809,32 +813,32 @@
 </div>
 
 <div id="patiWidget" class="pati-widget">
-  
   <div id="patiSpeech" class="pati-speech" style="display:none;">Hadi soru çözelim!</div>
-  <div class="pati-container">
-    
-    <div style="display:flex; flex-direction:column; align-items:center;">
-        <div id="patiAvatar" class="pati-avatar">🐶</div>
-        <div id="patiLevelBadge" class="pati-lvl">LVL 1</div>
-    </div>
-    
-    <div class="pati-stats-area">
-        <div class="pati-bar-wrap" title="Tokluk Durumu">
-            <div id="patiSatietyBar" class="pati-bar-fill" style="width: 100%;"></div>
-        </div>
-        
-        <div class="food-counter">
-            <span>🍖 Stok:</span>
-            <span id="patiFoodCount" style="font-weight:bold; color:#d97706;">0</span>
-        </div>
-        
-        <div style="font-size:9px; color:#888; margin-top:2px;">Toplam: <span id="patiTotalFed">0</span></div>
+
+  <div class="pati-container pati-compact">
+    <div class="pati-left">
+      <!-- üst progress -->
+      <div class="pati-top-progress" title="İlerleme">
+        <div id="patiTopBar" class="pati-top-fill" style="width:40%;"></div>
+      </div>
+
+      <div id="patiAvatar" class="pati-avatar">🐶</div>
+
+      <!-- alt 2 mini bar -->
+      <div class="pati-mini-bars" title="Durum">
+        <div class="mini-bar"><div id="patiMiniBar1" class="mini-fill" style="width:65%;"></div></div>
+        <div class="mini-bar"><div id="patiMiniBar2" class="mini-fill alt" style="width:30%;"></div></div>
+      </div>
     </div>
 
-    <button class="btn-feed" onclick="PatiManager.feed()" title="1 Mama Ver">+ Besle</button>
-
+    <button class="btn-feed btn-feed-fun" onclick="PatiManager.feed()" title="Besle" aria-label="Besle">
+      <span class="btn-ico">🍖</span>
+      <span class="btn-plus">＋</span>
+    </button>
   </div>
 </div>
+
+
 <div id="reportModal" class="modalOverlay" style="display: none;">
     <div class="modalCard report-card-fun">
         

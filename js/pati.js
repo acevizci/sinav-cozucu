@@ -555,6 +555,19 @@ window.PatiManager = {
   _lastMoodTalkTs: 0,
   _lastLiveSaveTs: 0,
 
+// =======================
+// CANLI PATİ (KÜÇÜK "GAME HUD" MOTORU)
+// - Akışı bozmaz: sadece idle anim/speech ekler, click/ feed ile canlanır
+// - Konuşmalar PatiSpeech arbiter'dan geçer (spam yok)
+// =======================
+life: {
+  started: false,
+  tIdle: null,
+  lastInteraction: 0,
+  _bound: false
+},
+
+
   init: function() {
     this.foodStock = parseInt(localStorage.getItem('pati_food') || 0, 10);
     this.totalFed  = parseInt(localStorage.getItem('pati_total_fed') || 0, 10);
@@ -576,8 +589,16 @@ window.PatiManager = {
       this.save();
     }
 
-    this.updateUI();
-    this.checkMood();
+this.updateUI();
+this.checkMood();
+
+// 🐾 Canlı mod (akışı bozmaz)
+this._markAlive();
+this._bindAlive();
+this._touch();
+try { this.startLiving?.(); } catch {}
+try { this._startIdle?.(); } catch {}
+
 
     // 👋 Karşılama (app açılışında)
     try { patiWelcomeOnAppOpen(); } catch {}
@@ -632,12 +653,16 @@ window.PatiManager = {
   },
 
   feed: function() {
+    this._touch?.();
     if (this.foodStock <= 0) {
       window.showToast?.({id:"PATI_NO_FOOD", kind:"warn"}); if(!window.showToast) (window.showWarn?.({ id:"PATI_NO_FOOD", vars: {} })) || console.warn(window.uiMsg ? window.uiMsg("PATI_NO_FOOD", {}) : "");
       return;
     }
     if (this.satiety >= 100) {
-      this.showSpeech("Çok tokum, teşekkürler! 🤢", 2000);
+      // Toksa: tek kısa mesaj (arbiter üzerinden)
+      try { PatiSpeech.beginTurn("feed-full-" + Date.now()); } catch {}
+      this.say?.("Çok tokum, teşekkürler! 🤢", 2000, { priority: 40 });
+      this._react?.("wiggle");
       return;
     }
 
@@ -664,6 +689,10 @@ window.PatiManager = {
 
     const msgs = ["Nyam nyam! 😋", "Çok lezzetli! ❤️", "Güçlendim! 💪", "Sen bir harikasın! 🥰"];
     this.showSpeech(msgs[Math.floor(Math.random() * msgs.length)]);
+	
+	const b = document.querySelector("#patiWidget .btn-feed-fun");
+	if (b){ b.classList.remove("pop"); void b.offsetWidth; b.classList.add("pop"); }
+
   },
 
   checkMood: function() {
@@ -686,6 +715,9 @@ window.PatiManager = {
     } else {
       avatar.innerText = "🐶";
       avatar.classList.remove('sad');
+
+      // ara sıra "mutlu" tepkisi (sessiz)
+      if (Math.random() < 0.06) this._react?.('wiggle');
     }
   },
 
@@ -695,6 +727,10 @@ window.PatiManager = {
   // CANLI PATİ MOTORU (RASTGELE DAVRANIŞLAR)
   // =======================
   startLiving: function() {
+    // çoklu init olmasın
+    if (this.life && this.life.started) return;
+    if (this.life) this.life.started = true;
+
     const avatar = document.getElementById('patiAvatar');
     if (!avatar) return;
 
@@ -738,6 +774,100 @@ window.PatiManager = {
 
   // ... (diğer fonksiyonlar devam eder)
   
+
+_touch: function(){
+  this.life.lastInteraction = Date.now();
+},
+
+_markAlive: function(){
+  const avatar = document.getElementById('patiAvatar');
+  if (avatar) avatar.classList.add('is-alive');
+},
+
+_react: function(type){
+  const avatar = document.getElementById('patiAvatar');
+  if (!avatar) return;
+
+  avatar.classList.remove('pop', 'wiggle');
+  // reflow trick (anim tekrar çalışsın)
+  void avatar.offsetWidth;
+
+  if (type === 'pop') avatar.classList.add('pop');
+  if (type === 'wiggle') avatar.classList.add('wiggle');
+
+  setTimeout(() => avatar.classList.remove('pop', 'wiggle'), 280);
+},
+
+say: function(text, duration=2400, { priority=18 } = {}){
+  const msg = String(text || '').trim();
+  if (!msg) return false;
+
+  // Önce arbiter (patiBubble varsa oraya basar), olmazsa klasik speech
+  const ok = PatiSpeech.trySpeak(msg, duration, { priority, globalCooldownMs: 250 });
+  if (!ok) {
+    this.showSpeech(msg, duration);
+  }
+  return ok;
+},
+
+_pickIdleLine: function(){
+  // satiety düşükse daha "hungry" (zaten checkMood tetikliyor ama idle'da da tutarlı olsun)
+  if ((this.satiety ?? 100) < 25) return _fallbackLine('hungry');
+  const pool = [
+    "Hadi 1 soru daha! 🐾",
+    "Odak mod! Ben buradayım 🐶",
+    "Mini hedef: 3 soru! ⚡",
+    "Pati hazır. Sen de hazır mısın? 😄",
+    "Beni tıkla, moral gelsin 😋"
+  ];
+  return pool[Math.floor(Math.random() * pool.length)];
+},
+
+_startIdle: function(){
+  if (this.life.tIdle) return;
+
+  const tick = () => {
+    // Widget kapalıysa / avatar yoksa çık
+    const avatar = document.getElementById('patiAvatar');
+    if (!avatar) { this.life.tIdle = null; return; }
+
+    const now = Date.now();
+    const last = this.life.lastInteraction || 0;
+    const idleFor = now - last;
+
+    // 12sn+ idle ise arada bir küçük reaksiyon/söz
+    if (idleFor > 12000) {
+      const r = Math.random();
+      if (r < 0.55) {
+        this.say(this._pickIdleLine(), 2300, { priority: 8 });
+      } else {
+        this._react('wiggle');
+      }
+    }
+
+    const next = 8000 + Math.floor(Math.random() * 8000); // 8-16sn
+    this.life.tIdle = setTimeout(tick, next);
+  };
+
+  this.life.tIdle = setTimeout(tick, 6000);
+},
+
+_bindAlive: function(){
+  if (this.life._bound) return;
+  this.life._bound = true;
+
+  const avatar = document.getElementById('patiAvatar');
+  if (!avatar) return;
+
+  avatar.addEventListener('click', () => {
+    this._touch();
+    this._react('wiggle');
+    // click konuşması: düşük öncelik
+    this.say("Buradayım 🐾", 1800, { priority: 12 });
+  });
+},
+
+
   updateUI: function() {
     const elFood = document.getElementById('patiFoodCount');
     if(elFood) elFood.textContent = this.foodStock;
@@ -756,6 +886,26 @@ window.PatiManager = {
       if (this.satiety < 30) elBar.classList.add('critical');
       else elBar.classList.remove('critical');
     }
+
+// Yeni mini HUD bar'ları (varsa) güncelle
+const topBar = document.getElementById('patiTopBar');
+if (topBar) {
+  const stride = getLevelUpStride();
+  const xp = _getLevelXp(); // 0..stride
+  const pct = stride ? Math.max(0, Math.min(100, Math.round((xp / stride) * 100))) : 0;
+  topBar.style.width = pct + '%';
+}
+
+const mini1 = document.getElementById('patiMiniBar1');
+if (mini1) {
+  mini1.style.width = Math.max(0, Math.min(100, Math.round(this.satiety))) + '%';
+}
+
+const mini2 = document.getElementById('patiMiniBar2');
+if (mini2) {
+  const fedCycle = (this.totalFed % 5) / 5;
+  mini2.style.width = Math.round(fedCycle * 100) + '%';
+}
 
     try { updateDailyStreakUI(); } catch {}
   },

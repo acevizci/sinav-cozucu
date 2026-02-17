@@ -22,6 +22,14 @@ const DEFAULT_SETTINGS = {
 
 // --- YARDIMCI FONKSİYONLAR (GLOBAL SCOPE) ---
 
+// --- DOCX Export visibility (for generated practice exams) ---
+function shouldShowDocxExport(note){
+  const t = String(note?.title || "");
+  const src = String(note?.source || "").toLowerCase();
+  // Show for generated/practice items or anything labeled as "deneme"
+  return src === "practice" || src === "generated" || /\bdeneme\b/i.test(t) || /deneme\d+/i.test(t);
+}
+
 function createNoteRow(note, selectedIds){
   const li = document.createElement("div");
   li.className = "noteRow";
@@ -36,6 +44,7 @@ function createNoteRow(note, selectedIds){
     </label>
     <div class="noteMeta">
       <span class="badge">${escapeHtml(note.source || "local")}</span>
+      ${shouldShowDocxExport(note) ? `<button class="btn ghost noteExport" title="Word olarak indir (Deneme + Cevap Anahtarı)">⬇️</button>` : ``}
       <button class="btn ghost noteRename" title="Yeniden adlandır">✎</button>
       <button class="btn ghost noteDelete" title="Sil">🗑</button>
     </div>
@@ -53,6 +62,9 @@ function escapeHtml(s){
 function showModal({ title, bodyHtml, onOk, okText="Kaydet", cancelText="İptal" }){
   const overlay = document.createElement("div");
   overlay.className = "modalOverlay";
+
+  const hasCancel = !(cancelText == null || String(cancelText).trim() === "");
+
   overlay.innerHTML = `
     <div class="modalCard" role="dialog" aria-modal="true">
       <div class="modalTop">
@@ -65,7 +77,7 @@ function showModal({ title, bodyHtml, onOk, okText="Kaydet", cancelText="İptal"
       <div class="divider"></div>
       <div class="modalBody">${bodyHtml}</div>
       <div class="modalActions">
-        <button class="ghost btnCancel">${escapeHtml(cancelText)}</button>
+        ${hasCancel ? `<button class="ghost btnCancel">${escapeHtml(cancelText)}</button>` : ``}
         <button class="primary btnOk">${escapeHtml(okText)}</button>
       </div>
     </div>
@@ -414,7 +426,369 @@ function showNotesError(msg){
   }
 
   // Fonksiyonu global'e ata (HTML onclick için)
+  // --- DOCX EXPORT (Notes / Generated Exams) ---------------------------------
+async function ensureDocxLib(){
+  // Supports CDN globals
+  const docxLib = window.docx;
+  const saver = window.saveAs;
+  if (!docxLib || !docxLib.Document || !docxLib.Packer) {
+    throw new Error("DOCX kütüphanesi yüklenemedi. (docx)");
+  }
+  if (typeof saver !== "function") {
+    throw new Error("İndirme kütüphanesi yüklenemedi. (FileSaver)");
+  }
+  return { docxLib, saveAs: saver };
+}
+
+function safeFileName(name){
+  return String(name || "deneme")
+    .replace(/[\\/:*?"<>|]/g, "-")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 120) || "deneme";
+}
+
+function pickQuestions(exam){
+  if (!exam || typeof exam !== "object") return [];
+  const q = exam.questions || exam.items || exam.qs || exam.quiz || [];
+  return Array.isArray(q) ? q : [];
+}
+
+function pickOptions(q){
+  const opts = q?.options || q?.choices || q?.answers || q?.items || [];
+  return Array.isArray(opts) ? opts : [];
+}
+
+function pickQuestionText(q){
+  return String(q?.text ?? q?.question ?? q?.stem ?? q?.prompt ?? q?.title ?? "").trim();
+}
+
+function pickCorrect(q){
+  const raw = q?.correctIndex ?? q?.answerIndex ?? q?.correct ?? q?.answer ?? q?.key ?? q?.correctOption ?? null;
+  let letter = null;
+
+  if (typeof raw === "number" && raw >= 0 && raw < 26) {
+    letter = String.fromCharCode(65 + raw);
+  } else if (typeof raw === "string") {
+    const s = raw.trim();
+    const m = s.match(/^([A-E])\b/i);
+    if (m) letter = m[1].toUpperCase();
+  }
+  return { letter, raw };
+}
+
+function extractExamForDocx(note){
+  // 1) Structured payloads
+  const exam = note?.parsedData || note?.exam || note?.meta?.exam || null;
+  if (exam) return { kind: "structured", exam };
+
+  // 2) Try to parse plain text exports into a structured exam
+  const text = String(note?.text || "");
+  const parsed = parseExamTextToStructured(text);
+  if (parsed) return { kind: "parsed", parsed };
+
+  // 3) Fallback: raw text
+  return { kind: "text", text };
+}
+
+function parseExamTextToStructured(rawText){
+  const text = String(rawText || "").replace(/\r/g, "").trim();
+  if (!text) return null;
+
+  // Split answer key section if exists
+  const keySplit = text.split(/✅\s*CEVAP\s*ANAHTARI[\s\S]*/i);
+  const mainPart = keySplit[0].trim();
+
+  // Extract key lines (best effort)
+  let keyMap = new Map(); // no -> letter
+  const keyMatch = text.match(/✅\s*CEVAP\s*ANAHTARI[\s\S]*?(\n[\s\S]*)$/i);
+  if (keyMatch && keyMatch[1]) {
+    const keyText = keyMatch[1]
+      .replace(/\|/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    // patterns like 1-C 2-C ...
+    const rePair = /(\d+)\s*[-–—]\s*([A-E])/gi;
+    let m;
+    while ((m = rePair.exec(keyText))) {
+      keyMap.set(parseInt(m[1], 10), m[2].toUpperCase());
+    }
+  }
+
+  // Parse header lines (before first question)
+  const qStart = mainPart.search(/^\s*\d+\.\s+/m);
+  const headerText = (qStart >= 0 ? mainPart.slice(0, qStart) : "").trim();
+  const bodyText = (qStart >= 0 ? mainPart.slice(qStart) : mainPart).trim();
+
+  const headerLines = headerText.split("\n").map(l => l.trim()).filter(Boolean);
+
+  // Heuristics: course line + exam line
+  let course = "";
+  let examTitle = "";
+  let meta = "";
+
+  if (headerLines.length) {
+    // Example:
+    // REKLAMCILIK 1
+    // DENEME SINAVI – 3
+    // (20 Soru / 5 Şık)
+    course = headerLines[0] || "";
+    examTitle = headerLines[1] || "";
+    meta = headerLines.slice(2).join(" ");
+  }
+
+  // Parse questions:
+  // Format:
+  // 1. question...
+  // A) ...
+  // B) ...
+  const qBlocks = bodyText.split(/^\s*(\d+)\.\s+/m).filter(s => s.trim() !== "");
+  // split keeps numbers? Using split with capture yields [pre, num, rest, num, rest...]
+  // We want pairs
+  const parts = bodyText.split(/^\s*(\d+)\.\s+/m);
+  const questions = [];
+  for (let i = 1; i < parts.length; i += 2) {
+    const no = parseInt(parts[i], 10);
+    const block = String(parts[i+1] || "").trim();
+
+    // options lines start with A) B)...
+    // We'll find all option starts and split
+    const optParts = block.split(/^\s*([A-E])\)\s+/m);
+    // optParts: [qText, "A", optA, "B", optB, ...]
+    const qText = (optParts[0] || "").trim().replace(/\n+/g, " ");
+    const options = [];
+    for (let j = 1; j < optParts.length; j += 2) {
+      const letter = optParts[j];
+      const optText = (optParts[j+1] || "").trim().split("\n")[0].trim(); // stop at newline to avoid bleeding
+      options.push({ letter: letter.toUpperCase(), text: optText });
+    }
+
+    // If options didn't parse, try line-based fallback (A) lines)
+    const optsClean = options.map(o => o.text).filter(Boolean);
+
+    const correctLetter = keyMap.get(no) || null;
+    questions.push({
+      no,
+      text: qText,
+      options: optsClean,
+      correctLetter
+    });
+  }
+
+  if (!questions.length) return null;
+
+  return {
+    course,
+    examTitle,
+    meta,
+    questions
+  };
+}
+
+
+
+async function exportNoteAsDocx(noteId){
+  const { docxLib, saveAs } = await ensureDocxLib();
+  const {
+    Document, Packer, Paragraph, TextRun,
+    HeadingLevel, AlignmentType,
+    Table, TableRow, TableCell,
+    WidthType, Footer
+  } = docxLib;
+
+  const note = listNotes().find(n => n.id === noteId);
+  if (!note) throw new Error("Not bulunamadı.");
+
+  const titleRaw = String(note.title || "Deneme").trim();
+  const createdAt = note.createdAt ? new Date(note.createdAt) : null;
+
+  // ---- Small docx helpers ----
+  const TR = (text, opts={}) => new TextRun({ text: String(text ?? ""), ...opts });
+  const PARA = (children, opts={}) => new Paragraph({ children, ...opts });
+  const SP_TIGHT  = { before: 0, after: 40,  line: 260 };
+  const SP_NORMAL = { before: 0, after: 80,  line: 260 };
+  const SP_LOOSE  = { before: 0, after: 120, line: 260 };
+
+  const children = [];
+
+  // ---------- HEADER ----------
+  children.push(PARA(
+    [TR(titleRaw, { bold: true })],
+    { alignment: AlignmentType.CENTER, spacing: SP_TIGHT, heading: HeadingLevel.HEADING_1 }
+  ));
+
+  if (createdAt && !isNaN(createdAt.getTime())) {
+    children.push(PARA(
+      [TR(`Tarih: ${createdAt.toLocaleDateString("tr-TR")}`, { color: "666666" })],
+      { alignment: AlignmentType.CENTER, spacing: SP_NORMAL }
+    ));
+  }
+
+  // Divider
+  children.push(new Paragraph({
+    spacing: { before: 0, after: 140 },
+    border: { bottom: { color: "BBBBBB", space: 1, value: "single", size: 6 } }
+  }));
+
+  const extracted = extractExamForDocx(note);
+
+  // ---------- QUESTIONS ----------
+  let questions = [];
+  let parsedHeader = null;
+
+  if (extracted.kind === "structured") {
+    questions = pickQuestions(extracted.exam);
+  } else if (extracted.kind === "parsed") {
+    parsedHeader = extracted.parsed;
+    questions = extracted.parsed.questions || [];
+  }
+
+  // If parsed header exists, use it for a cleaner header (course / exam title / meta)
+  if (parsedHeader) {
+    // Replace the H1-like header with a more exam-like layout:
+    // (We can't remove already-added paragraphs, so we just add a clean block on top of questions.)
+    children.push(PARA([TR(parsedHeader.course || titleRaw, { bold: true })], { alignment: AlignmentType.CENTER, spacing: SP_TIGHT }));
+    if (parsedHeader.examTitle) {
+      children.push(PARA([TR(parsedHeader.examTitle, { bold: true })], { alignment: AlignmentType.CENTER, spacing: SP_TIGHT }));
+    }
+    if (parsedHeader.meta) {
+      children.push(PARA([TR(parsedHeader.meta, { color: "666666" })], { alignment: AlignmentType.CENTER, spacing: SP_LOOSE }));
+    } else {
+      children.push(new Paragraph({ spacing: { before: 0, after: 160 } }));
+    }
+  }
+
+  if (!Array.isArray(questions) || questions.length === 0) {
+    // Fallback: plain text, but formatted
+    const text = (extracted.kind === "text" ? extracted.text : String(note?.text || "")).trim();
+    children.push(PARA(
+      [TR(text || "(İçerik yok)")],
+      { spacing: SP_NORMAL }
+    ));
+  } else {
+    questions.forEach((q, idx) => {
+      const no = q?.no ?? q?.number ?? (idx + 1);
+      const qText = pickQuestionText(q) || "(Soru metni yok)";
+
+      // Question paragraph (bold number only)
+      children.push(new Paragraph({
+        spacing: SP_NORMAL,
+        children: [
+          TR(`${no}) `, { bold: true }),
+          TR(qText)
+        ]
+      }));
+
+      // Options (indented)
+      const opts = (extracted.kind === "parsed") ? (q.options || []) : pickOptions(q);
+      opts.forEach((opt, i) => {
+        const letter = String.fromCharCode(65 + i);
+        const optText = (typeof opt === "string")
+          ? opt
+          : String(opt?.text ?? opt?.label ?? opt?.value ?? "");
+
+        children.push(new Paragraph({
+          spacing: { before: 0, after: 20, line: 240 },
+          indent: { left: 720 },
+          children: [
+            TR(`${letter}) `, { bold: true }),
+            TR(optText)
+          ]
+        }));
+      });
+
+      // Extra gap after each question block
+      children.push(new Paragraph({ spacing: { before: 0, after: 80 } }));
+    });
+
+    // ---------- ANSWER KEY ----------
+    children.push(PARA(
+      [TR("CEVAP ANAHTARI", { bold: true })],
+      { spacing: SP_NORMAL, heading: HeadingLevel.HEADING_2 }
+    ));
+
+    // Build compact grid: 5 entries per row, each entry = (No | Answer)
+    const entries = questions.map((q, idx) => {
+      const no = q?.no ?? q?.number ?? (idx + 1);
+      let ans = "-";
+      if (extracted.kind === "parsed") {
+        ans = String(q?.correctLetter || "-");
+      } else {
+        const c = pickCorrect(q);
+        ans = String(c.letter || "-");
+      }
+      return { no: String(no), ans };
+    });
+
+    const rows = [];
+    for (let i = 0; i < entries.length; i += 5) {
+      const slice = entries.slice(i, i + 5);
+
+      const cells = [];
+      slice.forEach((e) => {
+        // No cell
+        cells.push(new TableCell({
+          width: { size: 8, type: WidthType.PERCENTAGE },
+          children: [new Paragraph({ children: [TR(e.no, { bold: true })] })]
+        }));
+        // Answer cell
+        cells.push(new TableCell({
+          width: { size: 12, type: WidthType.PERCENTAGE },
+          children: [new Paragraph({ children: [TR(e.ans)] })]
+        }));
+      });
+
+      // Pad to 5 entries (10 cells) for consistent width
+      while (cells.length < 10) {
+        cells.push(new TableCell({ children: [new Paragraph("")] }));
+      }
+
+      rows.push(new TableRow({ children: cells }));
+    }
+
+    // If Table is not available (older builds), fallback to text line
+    if (typeof Table === "function") {
+      children.push(new Table({
+        width: { size: 100, type: WidthType.PERCENTAGE },
+        rows
+      }));
+    } else {
+      const line = entries.map(e => `${e.no}-${e.ans}`).join(" | ");
+      children.push(new Paragraph({ text: line || "-", spacing: SP_NORMAL }));
+    }
+  }
+
+  const doc = new Document({
+  sections: [{
+    properties: {
+      page: {
+        margin: { top: 720, right: 720, bottom: 720, left: 720 }
+      }
+    },
+    footers: {
+      default: new Footer({
+        children: [
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            spacing: { before: 0, after: 0, line: 240 },
+            children: [
+              new TextRun({ text: "ACUMEN • Intelligent Exam System", color: "999999", size: 18 })
+            ]
+          })
+        ]
+      })
+    },
+    children
+  }]
+});
+  const blob = await Packer.toBlob(doc);
+  const fileName = safeFileName(titleRaw) + ".docx";
+  saveAs(blob, fileName);
+}
+
+
   window.loadPastAttempt = loadPastAttempt;
+  window.exportNoteAsDocx = exportNoteAsDocx;
 
   function refresh() {
     syncSelectedOrder();
@@ -496,7 +870,21 @@ function showNotesError(msg){
       if (!row) return;
       const id = row.dataset.id;
 
-      if (e.target?.classList?.contains("noteDelete")){
+      
+
+      // ⬇️ Word Export (Deneme + Cevap Anahtarı)
+      if (e.target?.classList?.contains("noteExport")) {
+        e.preventDefault();
+        e.stopPropagation();
+        try {
+          await exportNoteAsDocx(id);
+        } catch (err) {
+          console.error(err);
+          if (typeof showWarn === "function") showWarn(err);
+        }
+        return;
+      }
+if (e.target?.classList?.contains("noteDelete")){
         removeNote(id);
         selectedIds.delete(id);
         refresh();
@@ -635,7 +1023,7 @@ function showNotesError(msg){
     const ov = showModal({
       title: "Drive'dan Not Ekle",
       okText: "Kapat",
-      cancelText: "Kapat",
+      cancelText: "",
       bodyHtml,
       onOk: async ()=>{}
     });
@@ -671,20 +1059,26 @@ function showNotesError(msg){
           return;
         }
 
-        elList.innerHTML = items.map(it => {
-          const id = it?.id || it?.fileId || it?.file_id;
-          const name = it?.name || it?.title || "Drive";
-          const mt = it?.mimeType || "";
-          return `
-            <button class="drivePickItem ${isFolder(mt) ? "isFolder":""}"
-              data-id="${escapeHtml(id)}"
-              data-name="${escapeHtml(name)}"
-              data-mime="${escapeHtml(mt)}">
-              <span class="drivePickName">${escapeHtml(name)}</span>
-              <span class="drivePickBadge">${escapeHtml(labelOf(mt))}</span>
-            </button>
-          `;
-        }).join("");
+elList.innerHTML = items.map(it => {
+  const id = it?.id || it?.fileId || it?.file_id;
+  const name = it?.name || it?.title || "Drive";
+  const mt = it?.mimeType || "";
+  
+  // Dosya tipine göre ikon belirleme
+  const icon = isFolder(mt) ? "📁" : (mt.includes("pdf") ? "📄" : "📝");
+
+  return `
+    <button class="drivePickItem ${isFolder(mt) ? "isFolder":""}"
+      data-id="${escapeHtml(id)}"
+      data-name="${escapeHtml(name)}"
+      data-mime="${escapeHtml(mt)}"
+      title="${escapeHtml(name)}">
+      <div class="drivePickIcon">${icon}</div>
+      <span class="drivePickName">${escapeHtml(name)}</span>
+      <span class="drivePickBadge">${escapeHtml(labelOf(mt))}</span>
+    </button>
+  `;
+}).join("");;
 
         elList.querySelectorAll(".drivePickItem").forEach(btn=>{
           btn.addEventListener("click", async ()=>{
