@@ -22,6 +22,34 @@ const DEFAULT_SETTINGS = {
 
 // --- YARDIMCI FONKSİYONLAR (GLOBAL SCOPE) ---
 
+// -----------------------------------------------------
+// DOCX LIB LOADER (tek kaynak: window.docx)
+// -----------------------------------------------------
+function ensureDocxLib(){
+  // docx is expected to be loaded globally (UMD) as window.docx
+  const docxLib = (typeof window !== "undefined") ? (window.docx || window.docxLib) : null;
+  if (!docxLib) {
+    return Promise.reject(new Error("DOCX kütüphanesi yüklenemedi (window.docx yok). index.html içinde docx UMD dosyasını yüklediğinden emin ol."));
+  }
+
+  // saveAs may be provided globally (FileSaver.js). If not, fallback to native download.
+  const saveAs = (typeof window !== "undefined" && typeof window.saveAs === "function")
+    ? window.saveAs
+    : function(blob, filename){
+        try{
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = filename || "dosya.docx";
+          document.body.appendChild(a);
+          a.click();
+          setTimeout(()=>{ try{ a.remove(); }catch(e){}; try{ URL.revokeObjectURL(url); }catch(e){}; }, 0);
+        }catch(e){}
+      };
+
+  return Promise.resolve({ docxLib, saveAs });
+}
+
 // --- DOCX Export visibility (for generated practice exams) ---
 function shouldShowDocxExport(note){
   const t = String(note?.title || "");
@@ -44,7 +72,7 @@ function createNoteRow(note, selectedIds){
     </label>
     <div class="noteMeta">
       <span class="badge">${escapeHtml(note.source || "local")}</span>
-      ${shouldShowDocxExport(note) ? `<button class="btn ghost noteExport" title="Word olarak indir (Deneme + Cevap Anahtarı)">⬇️</button>` : ``}
+      
       <button class="btn ghost noteRename" title="Yeniden adlandır">✎</button>
       <button class="btn ghost noteDelete" title="Sil">🗑</button>
     </div>
@@ -320,6 +348,18 @@ function showNotesError(msg){
                 title="Bu denemeyi sil">🗑</button>
       `;
 
+ 
+
+      // 📝 WORD İNDİRME BUTONU
+      const wordBtn = hasData 
+        ? `
+        <button onclick="event.stopPropagation(); downloadPastAttemptWord('${selHash}', ${attempt.attemptNo})" 
+                class="btn ghost sm" 
+                style="padding: 4px 6px; border-radius: 6px; margin-left: 5px;" 
+                title="Word olarak indir">📝</button>
+      `
+        : ``;
+
       return `
       <div class="noteRow" 
            ${clickAction}
@@ -338,6 +378,7 @@ function showNotesError(msg){
 
           <div class="noteMeta" style="display:flex; align-items:center;">
              ${btnHtml}
+             ${wordBtn}
              ${deleteBtn}
           </div>
 
@@ -346,451 +387,359 @@ function showNotesError(msg){
     `}).join("");
   }
 
-  // --- SİLME İŞLEVİNİ TETİKLEYEN FONKSİYON ---
-// --- SİLME İŞLEVİNİ TETİKLEYEN FONKSİYON (MODAL İLE) ---
-  async function deletePastAttempt(selHash, attemptNo) {
-    // Tarayıcı confirm'i yerine kendi şık modalımızı kullanıyoruz
-    showModal({
-      title: "Denemeyi Sil",
-      okText: "Evet, Sil",
-      cancelText: "Vazgeç",
-      bodyHtml: `
-        <div style="text-align: center; padding: 10px 0;">
-          <div style="font-size: 42px; margin-bottom: 12px;">🗑️</div>
-          <div style="font-size: 15px; font-weight: 600; color: var(--text-main); margin-bottom: 6px;">
-            Deneme #${attemptNo} silinecek.
-          </div>
-          <div style="font-size: 13px; color: var(--muted); line-height: 1.4;">
-            Bu işlem geri alınamaz ve sınav verisi kalıcı olarak kaybolur.<br>Devam etmek istiyor musun?
-          </div>
-        </div>
-      `,
-      onOk: async (modalEl) => {
-        // Silme işlemi onaylandıktan sonra burada çalışır
-        if (typeof deleteAttempt === "function") {
-            const success = deleteAttempt(selHash, attemptNo);
-            if (success) {
-                renderPracticeHistory(selHash);
-                if (typeof showToast === "function") showToast({ id:"PRACTICE_ATTEMPT_TRASHED", vars:{ attemptNo }, kind:"ok" });
-            } else {
-                 if (typeof showWarn === "function") showWarn({id:"NOTE_RECORD_NOT_FOUND"});
-            }
-        } else {
-            console.error("deleteAttempt fonksiyonu bulunamadı.");
-        }
-      }
-    });
-  }
-
-  // Fonksiyonu global'e ata (HTML onclick için)
-  window.deletePastAttempt = deletePastAttempt;
   
-  // HTML onclick'ten erişebilmesi için window'a atıyoruz
-  window.deletePastAttempt = deletePastAttempt;
+  // -------------------------------------------------------------------------
+  // WORD EXPORT (Denemeyi Word olarak indir)
+  // -------------------------------------------------------------------------
+    async function downloadPastAttemptWord(selHash, attemptNo){
+  try{
+    const rawData = localStorage.getItem("acumen_practice_history_v1");
+    const db = rawData ? JSON.parse(rawData) : { bySel: {} };
+    const row = db.bySel?.[selHash];
+    const attempt = row?.attempts?.[String(attemptNo)];
+    const parsed = attempt?.parsedData;
 
-  async function loadPastAttempt(selHash, attemptNo) {
-    try {
-      if (typeof setLoading === "function") setLoading(true, { id:"PRACTICE_LOADING_ATTEMPT", vars:{ attemptNo } });
-      
-      const rawData = localStorage.getItem("acumen_practice_history_v1");
-      const db = rawData ? JSON.parse(rawData) : { bySel: {} };
-      const row = db.bySel[selHash];
-      
-      if (!row || !row.attempts || !row.attempts[attemptNo]) {
-        throw appError("ERR_KAYIT_BULUNAMADI");
-      }
-
-      const savedExam = row.attempts[attemptNo].parsedData; 
-      if (!savedExam) {
-         // Eski kayıtlarda veri olmadığı için buraya düşer
-         throw appError("ERR_BU_DENEME_ESKI_SURUMLE_OLUSTURULMUS");
-      }
-
-      state.parsed = JSON.parse(JSON.stringify(savedExam));
-      state.mode = "prep";
-      state.answers?.clear?.();
-
-      if (typeof paintAll === "function") paintAll();
-      if (typeof persist === "function") persist();
-      
-      if (typeof startExam === "function") {
-        startExam();
-        if (typeof showToast === "function") showToast({ id:"PRACTICE_ATTEMPT_LOADED", vars:{ attemptNo }, kind:"ok" });
-      }
-    } catch (err) {
-      console.error(err);
-      if (typeof showWarn === "function") showWarn(err);
-    } finally {
-      if (typeof setLoading === "function") setLoading(false);
-    }
-  }
-
-  // Fonksiyonu global'e ata (HTML onclick için)
-  // --- DOCX EXPORT (Notes / Generated Exams) ---------------------------------
-async function ensureDocxLib(){
-  // Supports CDN globals
-  const docxLib = window.docx;
-  const saver = window.saveAs;
-  if (!docxLib || !docxLib.Document || !docxLib.Packer) {
-    throw new Error("DOCX kütüphanesi yüklenemedi. (docx)");
-  }
-  if (typeof saver !== "function") {
-    throw new Error("İndirme kütüphanesi yüklenemedi. (FileSaver)");
-  }
-  return { docxLib, saveAs: saver };
-}
-
-function safeFileName(name){
-  return String(name || "deneme")
-    .replace(/[\\/:*?"<>|]/g, "-")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, 120) || "deneme";
-}
-
-function pickQuestions(exam){
-  if (!exam || typeof exam !== "object") return [];
-  const q = exam.questions || exam.items || exam.qs || exam.quiz || [];
-  return Array.isArray(q) ? q : [];
-}
-
-function pickOptions(q){
-  const opts = q?.options || q?.choices || q?.answers || q?.items || [];
-  return Array.isArray(opts) ? opts : [];
-}
-
-function pickQuestionText(q){
-  return String(q?.text ?? q?.question ?? q?.stem ?? q?.prompt ?? q?.title ?? "").trim();
-}
-
-function pickCorrect(q){
-  const raw = q?.correctIndex ?? q?.answerIndex ?? q?.correct ?? q?.answer ?? q?.key ?? q?.correctOption ?? null;
-  let letter = null;
-
-  if (typeof raw === "number" && raw >= 0 && raw < 26) {
-    letter = String.fromCharCode(65 + raw);
-  } else if (typeof raw === "string") {
-    const s = raw.trim();
-    const m = s.match(/^([A-E])\b/i);
-    if (m) letter = m[1].toUpperCase();
-  }
-  return { letter, raw };
-}
-
-function extractExamForDocx(note){
-  // 1) Structured payloads
-  const exam = note?.parsedData || note?.exam || note?.meta?.exam || null;
-  if (exam) return { kind: "structured", exam };
-
-  // 2) Try to parse plain text exports into a structured exam
-  const text = String(note?.text || "");
-  const parsed = parseExamTextToStructured(text);
-  if (parsed) return { kind: "parsed", parsed };
-
-  // 3) Fallback: raw text
-  return { kind: "text", text };
-}
-
-function parseExamTextToStructured(rawText){
-  const text = String(rawText || "").replace(/\r/g, "").trim();
-  if (!text) return null;
-
-  // Split answer key section if exists
-  const keySplit = text.split(/✅\s*CEVAP\s*ANAHTARI[\s\S]*/i);
-  const mainPart = keySplit[0].trim();
-
-  // Extract key lines (best effort)
-  let keyMap = new Map(); // no -> letter
-  const keyMatch = text.match(/✅\s*CEVAP\s*ANAHTARI[\s\S]*?(\n[\s\S]*)$/i);
-  if (keyMatch && keyMatch[1]) {
-    const keyText = keyMatch[1]
-      .replace(/\|/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
-    // patterns like 1-C 2-C ...
-    const rePair = /(\d+)\s*[-–—]\s*([A-E])/gi;
-    let m;
-    while ((m = rePair.exec(keyText))) {
-      keyMap.set(parseInt(m[1], 10), m[2].toUpperCase());
-    }
-  }
-
-  // Parse header lines (before first question)
-  const qStart = mainPart.search(/^\s*\d+\.\s+/m);
-  const headerText = (qStart >= 0 ? mainPart.slice(0, qStart) : "").trim();
-  const bodyText = (qStart >= 0 ? mainPart.slice(qStart) : mainPart).trim();
-
-  const headerLines = headerText.split("\n").map(l => l.trim()).filter(Boolean);
-
-  // Heuristics: course line + exam line
-  let course = "";
-  let examTitle = "";
-  let meta = "";
-
-  if (headerLines.length) {
-    // Example:
-    // REKLAMCILIK 1
-    // DENEME SINAVI – 3
-    // (20 Soru / 5 Şık)
-    course = headerLines[0] || "";
-    examTitle = headerLines[1] || "";
-    meta = headerLines.slice(2).join(" ");
-  }
-
-  // Parse questions:
-  // Format:
-  // 1. question...
-  // A) ...
-  // B) ...
-  const qBlocks = bodyText.split(/^\s*(\d+)\.\s+/m).filter(s => s.trim() !== "");
-  // split keeps numbers? Using split with capture yields [pre, num, rest, num, rest...]
-  // We want pairs
-  const parts = bodyText.split(/^\s*(\d+)\.\s+/m);
-  const questions = [];
-  for (let i = 1; i < parts.length; i += 2) {
-    const no = parseInt(parts[i], 10);
-    const block = String(parts[i+1] || "").trim();
-
-    // options lines start with A) B)...
-    // We'll find all option starts and split
-    const optParts = block.split(/^\s*([A-E])\)\s+/m);
-    // optParts: [qText, "A", optA, "B", optB, ...]
-    const qText = (optParts[0] || "").trim().replace(/\n+/g, " ");
-    const options = [];
-    for (let j = 1; j < optParts.length; j += 2) {
-      const letter = optParts[j];
-      const optText = (optParts[j+1] || "").trim().split("\n")[0].trim(); // stop at newline to avoid bleeding
-      options.push({ letter: letter.toUpperCase(), text: optText });
+    if (!parsed){
+      if (typeof showWarn === "function") showWarn({ id:"ERR_BU_DENEME_ESKI_SURUMLE_OLUSTURULMUS" });
+      return;
     }
 
-    // If options didn't parse, try line-based fallback (A) lines)
-    const optsClean = options.map(o => o.text).filter(Boolean);
+    // Ensure docx lib is available
+    const { docxLib, saveAs } = await ensureDocxLib();
+    const {
+      Document, Packer, Paragraph, TextRun,
+      HeadingLevel, AlignmentType,
+      Table, TableRow, TableCell,
+      WidthType, Footer, PageNumber
+    } = docxLib;
 
-    const correctLetter = keyMap.get(no) || null;
-    questions.push({
-      no,
-      text: qText,
-      options: optsClean,
-      correctLetter
-    });
-  }
+    const title = parsed?.title || `Deneme #${attemptNo}`;
+    const createdAt = attempt?.createdAt ? new Date(attempt.createdAt).toLocaleString("tr-TR") : "";
+    const questions = Array.isArray(parsed?.questions) ? parsed.questions : [];
+    const answerKey = parsed?.answerKey || parsed?.meta?.answerKey || {};
 
-  if (!questions.length) return null;
+    const children = [];
 
-  return {
-    course,
-    examTitle,
-    meta,
-    questions
-  };
-}
+    // Title
+    children.push(new Paragraph({
+      text: String(title),
+      heading: HeadingLevel.HEADING_1,
+      alignment: AlignmentType.CENTER,
+      spacing: { before: 0, after: 60 }
+    }));
 
-
-
-async function exportNoteAsDocx(noteId){
-  const { docxLib, saveAs } = await ensureDocxLib();
-  const {
-    Document, Packer, Paragraph, TextRun,
-    HeadingLevel, AlignmentType,
-    Table, TableRow, TableCell,
-    WidthType, Footer
-  } = docxLib;
-
-  const note = listNotes().find(n => n.id === noteId);
-  if (!note) throw new Error("Not bulunamadı.");
-
-  const titleRaw = String(note.title || "Deneme").trim();
-  const createdAt = note.createdAt ? new Date(note.createdAt) : null;
-
-  // ---- Small docx helpers ----
-  const TR = (text, opts={}) => new TextRun({ text: String(text ?? ""), ...opts });
-  const PARA = (children, opts={}) => new Paragraph({ children, ...opts });
-  const SP_TIGHT  = { before: 0, after: 40,  line: 260 };
-  const SP_NORMAL = { before: 0, after: 80,  line: 260 };
-  const SP_LOOSE  = { before: 0, after: 120, line: 260 };
-
-  const children = [];
-
-  // ---------- HEADER ----------
-  children.push(PARA(
-    [TR(titleRaw, { bold: true })],
-    { alignment: AlignmentType.CENTER, spacing: SP_TIGHT, heading: HeadingLevel.HEADING_1 }
-  ));
-
-  if (createdAt && !isNaN(createdAt.getTime())) {
-    children.push(PARA(
-      [TR(`Tarih: ${createdAt.toLocaleDateString("tr-TR")}`, { color: "666666" })],
-      { alignment: AlignmentType.CENTER, spacing: SP_NORMAL }
-    ));
-  }
-
-  // Divider
-  children.push(new Paragraph({
-    spacing: { before: 0, after: 140 },
-    border: { bottom: { color: "BBBBBB", space: 1, value: "single", size: 6 } }
-  }));
-
-  const extracted = extractExamForDocx(note);
-
-  // ---------- QUESTIONS ----------
-  let questions = [];
-  let parsedHeader = null;
-
-  if (extracted.kind === "structured") {
-    questions = pickQuestions(extracted.exam);
-  } else if (extracted.kind === "parsed") {
-    parsedHeader = extracted.parsed;
-    questions = extracted.parsed.questions || [];
-  }
-
-  // If parsed header exists, use it for a cleaner header (course / exam title / meta)
-  if (parsedHeader) {
-    // Replace the H1-like header with a more exam-like layout:
-    // (We can't remove already-added paragraphs, so we just add a clean block on top of questions.)
-    children.push(PARA([TR(parsedHeader.course || titleRaw, { bold: true })], { alignment: AlignmentType.CENTER, spacing: SP_TIGHT }));
-    if (parsedHeader.examTitle) {
-      children.push(PARA([TR(parsedHeader.examTitle, { bold: true })], { alignment: AlignmentType.CENTER, spacing: SP_TIGHT }));
-    }
-    if (parsedHeader.meta) {
-      children.push(PARA([TR(parsedHeader.meta, { color: "666666" })], { alignment: AlignmentType.CENTER, spacing: SP_LOOSE }));
-    } else {
-      children.push(new Paragraph({ spacing: { before: 0, after: 160 } }));
-    }
-  }
-
-  if (!Array.isArray(questions) || questions.length === 0) {
-    // Fallback: plain text, but formatted
-    const text = (extracted.kind === "text" ? extracted.text : String(note?.text || "")).trim();
-    children.push(PARA(
-      [TR(text || "(İçerik yok)")],
-      { spacing: SP_NORMAL }
-    ));
-  } else {
-    questions.forEach((q, idx) => {
-      const no = q?.no ?? q?.number ?? (idx + 1);
-      const qText = pickQuestionText(q) || "(Soru metni yok)";
-
-      // Question paragraph (bold number only)
+    if (createdAt){
       children.push(new Paragraph({
-        spacing: SP_NORMAL,
+        children: [new TextRun({ text: createdAt, color: "777777", size: 18 })],
+        alignment: AlignmentType.CENTER,
+        spacing: { before: 0, after: 120 }
+      }));
+    }
+
+// Meta line (compact)
+children.push(new Paragraph({
+  children: [
+    new TextRun({ text: `Soru: ${questions.length}`, color: "777777", size: 18 }),
+    new TextRun({ text: `  •  Anahtar: ${Object.keys(answerKey||{}).length}`, color: "777777", size: 18 })
+  ],
+  alignment: AlignmentType.CENTER,
+  spacing: { before: 0, after: 120 }
+}));
+
+
+    // Questions (compact)
+    for (const q of questions){
+      const n = q?.n ?? "";
+      const qText = String(q?.text || q?.q || q?.question || "").trim();
+      const opts = Array.isArray(q?.options) ? q.options : [];
+
+      children.push(new Paragraph({
         children: [
-          TR(`${no}) `, { bold: true }),
-          TR(qText)
-        ]
+          new TextRun({ text: `${n}) `, bold: true }),
+          new TextRun({ text: qText })
+        ],
+        spacing: { before: 0, after: 60 }
       }));
 
-      // Options (indented)
-      const opts = (extracted.kind === "parsed") ? (q.options || []) : pickOptions(q);
-      opts.forEach((opt, i) => {
-        const letter = String.fromCharCode(65 + i);
-        const optText = (typeof opt === "string")
-          ? opt
-          : String(opt?.text ?? opt?.label ?? opt?.value ?? "");
+      
+// Options (A,B,C...) — supports multiple parsed shapes
+const letters = ["A","B","C","D","E","F","G","H"];
 
+function pickOptionText(v){
+  if (v == null) return "";
+  if (typeof v === "string") return v;
+  return String(v.text || v.label || v.value || v.content || v.title || "").trim();
+}
+
+let optTexts = [];
+// 1) common: q.options = [{text}] or ["..."]
+if (Array.isArray(opts) && opts.length){
+  optTexts = opts.map(pickOptionText).filter(Boolean);
+}
+// 2) common: q.optionsByLetter = {A:{text}, B:{text}...}
+if (!optTexts.length && q && typeof q.optionsByLetter === "object" && q.optionsByLetter){
+  const keys = Object.keys(q.optionsByLetter).sort();
+  optTexts = keys.map(k => pickOptionText(q.optionsByLetter[k])).filter(Boolean);
+}
+// 3) other: q.choices = [...]
+if (!optTexts.length && Array.isArray(q?.choices) && q.choices.length){
+  optTexts = q.choices.map(pickOptionText).filter(Boolean);
+}
+// 4) other: q.optionsMap = {A:".."} etc.
+if (!optTexts.length && q && typeof q.optionsMap === "object" && q.optionsMap){
+  const keys = Object.keys(q.optionsMap).sort();
+  optTexts = keys.map(k => pickOptionText(q.optionsMap[k])).filter(Boolean);
+}
+
+for (let i=0; i<optTexts.length; i++){
+  const oText = optTexts[i];
+  const L = letters[i] || String.fromCharCode(65 + i);
+  children.push(new Paragraph({
+    children: [
+      new TextRun({ text: `${L}) `, bold: true }),
+      new TextRun({ text: oText })
+    ],
+    spacing: { before: 0, after: 0 }
+  }));
+}
+// Small topic line if exists
+      const subj = (q?.subject || q?.topic || q?.konu || "").toString().trim();
+      if (subj){
         children.push(new Paragraph({
-          spacing: { before: 0, after: 20, line: 240 },
-          indent: { left: 720 },
-          children: [
-            TR(`${letter}) `, { bold: true }),
-            TR(optText)
-          ]
+          children: [new TextRun({ text: `Konu: ${subj}`, color:"666666", size: 16 })],
+          spacing: { before: 20, after: 60 }
         }));
-      });
-
-      // Extra gap after each question block
-      children.push(new Paragraph({ spacing: { before: 0, after: 80 } }));
-    });
-
-    // ---------- ANSWER KEY ----------
-    children.push(PARA(
-      [TR("CEVAP ANAHTARI", { bold: true })],
-      { spacing: SP_NORMAL, heading: HeadingLevel.HEADING_2 }
-    ));
-
-    // Build compact grid: 5 entries per row, each entry = (No | Answer)
-    const entries = questions.map((q, idx) => {
-      const no = q?.no ?? q?.number ?? (idx + 1);
-      let ans = "-";
-      if (extracted.kind === "parsed") {
-        ans = String(q?.correctLetter || "-");
       } else {
-        const c = pickCorrect(q);
-        ans = String(c.letter || "-");
+        children.push(new Paragraph({ text: "", spacing: { before: 0, after: 120 } }));
       }
-      return { no: String(no), ans };
-    });
-
-    const rows = [];
-    for (let i = 0; i < entries.length; i += 5) {
-      const slice = entries.slice(i, i + 5);
-
-      const cells = [];
-      slice.forEach((e) => {
-        // No cell
-        cells.push(new TableCell({
-          width: { size: 8, type: WidthType.PERCENTAGE },
-          children: [new Paragraph({ children: [TR(e.no, { bold: true })] })]
-        }));
-        // Answer cell
-        cells.push(new TableCell({
-          width: { size: 12, type: WidthType.PERCENTAGE },
-          children: [new Paragraph({ children: [TR(e.ans)] })]
-        }));
-      });
-
-      // Pad to 5 entries (10 cells) for consistent width
-      while (cells.length < 10) {
-        cells.push(new TableCell({ children: [new Paragraph("")] }));
-      }
-
-      rows.push(new TableRow({ children: cells }));
     }
 
-    // If Table is not available (older builds), fallback to text line
-    if (typeof Table === "function") {
+    // Answer Key (compact)
+    const keyCount = answerKey ? Object.keys(answerKey).length : 0;
+    if (keyCount){
+      
+// =====================
+// CEVAP KAĞIDI (Optik) — kağıt dostu
+// =====================
+try{
+  const optikCols = ["A","B","C","D","E"];
+  // Başlık
+  children.push(new Paragraph({
+    children: [new TextRun({ text: "CEVAP KAĞIDI", bold: true })],
+    spacing: { before: 120, after: 60 }
+  }));
+
+  // Tablo: Q | A | B | C | D | E
+  const headerRow = new TableRow({
+    children: [
+      new TableCell({ width: { size: 9, type: WidthType.PERCENTAGE }, children: [new Paragraph({ children:[new TextRun({ text:"S", bold:true })], spacing:{ before:0, after:0 } })] }),
+      ...optikCols.map(L => new TableCell({
+        width: { size: 18, type: WidthType.PERCENTAGE },
+        children: [new Paragraph({ alignment: AlignmentType.CENTER, children:[new TextRun({ text: L, bold:true })], spacing:{ before:0, after:0 } })]
+      }))
+    ]
+  });
+
+  const optikRows = [headerRow];
+
+  // Daire karakteri: ○ (boş), ● (dolu) — burada hep boş bırakıyoruz
+const emptyBubble = "○";
+const filledBubble = "●";
+
+// answerKey kaynakları (parsed şekline göre)
+const keyMap = parsed?.answerKey || parsed?.meta?.answerKey || {};
+
+// "A" / "A,B" / ["A","C"] / Set("A") gibi gelenleri normalize et
+function normKey(v){
+  if (!v) return [];
+  if (typeof v === "string") {
+    // "A", "A,B", "A C" gibi durumlar
+    return v.replace(/[^A-Z]/gi, " ")
+            .trim()
+            .split(/\s+/)
+            .map(x => x.toUpperCase())
+            .filter(Boolean);
+  }
+  if (Array.isArray(v)) return v.map(x => String(x).toUpperCase());
+  if (v instanceof Set) return Array.from(v).map(x => String(x).toUpperCase());
+  return [String(v).toUpperCase()];
+}
+
+for (let i=1; i<=qCount; i++){
+  const raw = keyMap[i] || keyMap[String(i)] || keyMap[Number(i)];
+  const correct = new Set(normKey(raw)); // örn: {"B"} veya {"A","D"}
+
+  optikRows.push(new TableRow({
+    children: [
+      new TableCell({
+        width: { size: 9, type: WidthType.PERCENTAGE },
+        children: [new Paragraph({ children:[new TextRun({ text: String(i) })], spacing:{ before:0, after:0 } })]
+      }),
+      ...optikCols.map((L) => new TableCell({
+        width: { size: 18, type: WidthType.PERCENTAGE },
+        children: [new Paragraph({
+          alignment: AlignmentType.CENTER,
+          children:[new TextRun({
+            text: correct.has(L) ? filledBubble : emptyBubble,
+            size: 18,
+            color: correct.has(L) ? "111111" : "777777"
+          })],
+          spacing:{ before:0, after:0 }
+        })]
+      }))
+    ]
+  }));
+}
+
+
+  children.push(new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    rows: optikRows
+  }));
+
+  // küçük boşluk
+  children.push(new Paragraph({ children:[new TextRun({ text: "" })], spacing:{ before: 60, after: 60 } }));
+}catch(e){}
+children.push(new Paragraph({
+        text: "CEVAP ANAHTARI",
+        heading: HeadingLevel.HEADING_2,
+        alignment: AlignmentType.CENTER,
+        spacing: { before: 180, after: 80 }
+      }));
+
+      const cols = 7;
+      const rows = [];
+      let curRow = [];
+
+      const qCount = questions.length || 0;
+      for (let i=1;i<=qCount;i++){
+        const ans = answerKey[i] || answerKey[String(i)] || "-";
+        curRow.push(new TableCell({
+          width: { size: 100/cols, type: WidthType.PERCENTAGE },
+          margins: { top: 60, bottom: 60, left: 60, right: 60 },
+          children: [new Paragraph({
+            children: [
+              new TextRun({ text: `${i}. `, bold: true }),
+              new TextRun({ text: String(ans).trim().toUpperCase() })
+            ],
+            spacing: { before: 0, after: 0 }
+          })]
+        }));
+
+        if (curRow.length === cols){
+          rows.push(new TableRow({ children: curRow }));
+          curRow = [];
+        }
+      }
+      if (curRow.length){
+        while (curRow.length < cols){
+          curRow.push(new TableCell({
+            width: { size: 100/cols, type: WidthType.PERCENTAGE },
+            children: [new Paragraph({ text: "" })]
+          }));
+        }
+        rows.push(new TableRow({ children: curRow }));
+      }
+
       children.push(new Table({
         width: { size: 100, type: WidthType.PERCENTAGE },
         rows
       }));
-    } else {
-      const line = entries.map(e => `${e.no}-${e.ans}`).join(" | ");
-      children.push(new Paragraph({ text: line || "-", spacing: SP_NORMAL }));
     }
-  }
 
-  const doc = new Document({
-  sections: [{
-    properties: {
-      page: {
-        margin: { top: 720, right: 720, bottom: 720, left: 720 }
-      }
-    },
-    footers: {
-      default: new Footer({
-        children: [
-          new Paragraph({
-            alignment: AlignmentType.CENTER,
-            spacing: { before: 0, after: 0, line: 240 },
+    const doc = new Document({
+      sections: [{
+        properties: { pageNumberStart: 1, page: { size: { width: 11906, height: 16838 }, margin: { top: 720, right: 720, bottom: 720, left: 720 } } },
+        footers: {
+          default: new Footer({
             children: [
-              new TextRun({ text: "ACUMEN • Intelligent Exam System", color: "999999", size: 18 })
+              new Paragraph({
+                alignment: AlignmentType.CENTER,
+                spacing: { before: 0, after: 0, line: 240 },
+                children: [
+                  new TextRun({ text: "Sayfa ", color: "999999", size: 18 }),
+                  new TextRun({ children: [PageNumber.CURRENT], color: "999999", size: 18 }),
+                  new TextRun({ text: " / ", color: "999999", size: 18 }),
+                  new TextRun({ children: [PageNumber.TOTAL_PAGES], color: "999999", size: 18 })
+                ]
+              })
             ]
           })
-        ]
-      })
-    },
-    children
-  }]
-});
-  const blob = await Packer.toBlob(doc);
-  const fileName = safeFileName(titleRaw) + ".docx";
-  saveAs(blob, fileName);
+        },
+        children
+      }]
+    });
+
+    const blob = await Packer.toBlob(doc);
+    const safeName = String(title || `Deneme_${attemptNo}`).replace(/[\/:*?"<>|]+/g, "_");
+    saveAs(blob, `${safeName}.docx`);
+    try{ showToast?.({ id:"PRACTICE_WORD_DOWNLOADED", kind:"ok" }); }catch(e){}
+  }catch(e){
+    try{ showToast?.({ id:"PRACTICE_WORD_FAIL", kind:"warn" }); }catch(err){}
+  }
 }
 
 
-  window.loadPastAttempt = loadPastAttempt;
-  window.exportNoteAsDocx = exportNoteAsDocx;
 
-  function refresh() {
+  // -------------------------------------------------------
+  // Practice History actions (inline onclick hooks)
+  // -------------------------------------------------------
+  function loadPastAttempt(selHash, attemptNo){
+    try{
+      const rawData = localStorage.getItem("acumen_practice_history_v1");
+      const db = rawData ? JSON.parse(rawData) : { bySel: {} };
+      const row = db.bySel?.[selHash];
+      const attempt = row?.attempts?.[String(attemptNo)];
+      const parsed = attempt?.parsedData;
+
+      if (!parsed){
+        showWarn?.({ id:"ERR_BU_DENEME_ESKI_SURUMLE_OLUSTURULMUS" });
+        return;
+      }
+
+      state.parsed = parsed;
+      state.rawText = "";
+      state.mode = "prep";
+      try{ state.answers?.clear?.(); }catch(e){}
+
+      paintAll?.();
+      persist?.();
+
+      try{ startExam?.(); }catch(e){}
+    }catch(err){
+      console.error(err);
+      showWarn?.(err);
+    }
+  }
+
+  function deletePastAttempt(selHash, attemptNo){
+    try{
+      deleteAttempt?.(selHash, attemptNo);
+
+      // UI refresh (if current selection matches)
+      const selectionHash = makeSelectionHash(Array.from(selectedIds));
+      if (selectionHash === selHash){
+        renderPracticeHistory(selHash);
+        try{
+          if (inpAttempt){
+            const nextAttempt = getNextAttempt(selHash);
+            inpAttempt.value = String(nextAttempt);
+          }
+        }catch(e){}
+      }
+
+      showToast?.({ id:"PRACTICE_ATTEMPT_DELETED", kind:"ok" });
+    }catch(err){
+      console.error(err);
+      showWarn?.(err);
+    }
+  }
+
+  // Expose for inline onclick usage
+  window.loadPastAttempt = loadPastAttempt;
+  window.deletePastAttempt = deletePastAttempt;
+  window.downloadPastAttemptWord = downloadPastAttemptWord;
+  function refresh(){
     syncSelectedOrder();
     const notes = listNotes();
     
@@ -869,21 +818,6 @@ async function exportNoteAsDocx(noteId){
       const row = e.target?.closest?.(".noteRow");
       if (!row) return;
       const id = row.dataset.id;
-
-      
-
-      // ⬇️ Word Export (Deneme + Cevap Anahtarı)
-      if (e.target?.classList?.contains("noteExport")) {
-        e.preventDefault();
-        e.stopPropagation();
-        try {
-          await exportNoteAsDocx(id);
-        } catch (err) {
-          console.error(err);
-          if (typeof showWarn === "function") showWarn(err);
-        }
-        return;
-      }
 if (e.target?.classList?.contains("noteDelete")){
         removeNote(id);
         selectedIds.delete(id);

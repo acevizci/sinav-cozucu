@@ -3,6 +3,20 @@
 import { safe, safeText, safeShow } from "./shared.js";
 import { getChosenOptionId, getCorrectDisplayLetter } from "./shared.js";
 
+function setControlStatus(type, text){
+  const label = document.getElementById("parseStatus");
+  const indicator = document.querySelector(".status-indicator");
+  if (label) {
+    label.textContent = text;
+    label.classList.remove("ready","loading","running","finished");
+    label.classList.add(type);
+  }
+  if (indicator) {
+    indicator.classList.remove("ready","loading","running","finished");
+    indicator.classList.add(type);
+  }
+}
+
 export function updateModeUI(state, wrongStats) {
   // --- 1. HEADER ROZET VE RENK AYARLARI ---
   const modeBadge = document.getElementById("statusBadgeMode");
@@ -89,6 +103,33 @@ export function updateModeUI(state, wrongStats) {
     wbtn.disabled = !(total > 0 && state?.mode !== "exam");
     wbtn.textContent = total > 0 ? `♻ Tekrar (Bugün ${due} / Toplam ${total})` : "♻ Tekrar (0)";
   }
+  
+  // --- 5. KONTROL MERKEZİ DURUMU (Hazır / Sınav / Bitti) ---
+try {
+  const m = state?.mode;
+  const isParsing = !!(state?.isParsing || state?.parsing || state?.loading || state?.isLoading || state?.busy);
+  if (isParsing && !state?.parsed) {
+    setControlStatus("loading", "Yükleniyor");
+  } else if (m === "exam") {
+    setControlStatus("running", "Sınav");
+  } else if (m === "result") {
+    setControlStatus("finished", "Bitti");
+  } else {
+    setControlStatus("ready", "Hazır");
+  }
+} catch {}
+
+// --- SCRATCHPAD (Karalama) - single source of truth ---
+try {
+  const spBtn = document.getElementById("btnScratchpad");
+  if (spBtn) spBtn.style.display = (state?.mode === "exam") ? "inline-flex" : "none";
+
+  window.Scratchpad?.onModeChange?.(state);
+
+ if (state?.mode === "result") {
+  try { window.clearScratchpad?.(); } catch (e) {}
+}
+} catch (e) {}
 }
 
 // ✅ Adil skor: yalnızca anahtarı olan sorular paydada.

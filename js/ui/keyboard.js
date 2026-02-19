@@ -20,11 +20,27 @@ export function attachKeyboardShortcuts(state, onPickLetter, onFinish){
     }
     return best;
   }
-  document.addEventListener("keydown", e=>{
+  document.addEventListener("keydown", async (e)=>{
     if (state.mode!=="exam") return;
+// Scratchpad açıkken veya kullanıcı yazı yazarken arka kısayollar çalışmasın
+const ov = document.getElementById("scratchpadOverlay");
+const ovOpen = !!(ov && ov.style && ov.style.display === "flex");
+if (ovOpen) return;
+
     if (e.ctrlKey && e.key==="Enter"){
+      const ok = (typeof window.confirmFinishIfScratchpadDirty === "function")
+        ? await window.confirmFinishIfScratchpadDirty()
+        : true;
+      if (!ok) { e.preventDefault(); return; }
       e.preventDefault(); onFinish?.(); return;
     }
+
+const ae = document.activeElement;
+const tag = (ae?.tagName || "").toLowerCase();
+if (tag === "input" || tag === "textarea") return;
+if (ae && ov && ov.contains(ae)) return;
+
+    // (Ctrl+Enter yukarıda handle ediliyor)
     
     const k = e.key.toUpperCase();
     // 🔥 FIX: A-F kontrolü

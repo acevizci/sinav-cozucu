@@ -7,6 +7,49 @@ import { refreshNavColors } from "./nav.js";
 import { runGeminiAnalysis, runGeminiGenerator } from "./ai.js";
 import { lookupWrongRecord } from "../wrongBook.js";
 
+// ================= "EMİN DEĞİLİM" ( ?) + PIN ÖNERİSİ =================
+// Not: Bu modül, Scratchpad'e sadece "öneri" gönderir; otomatik not yazmaz.
+const UNSURE_KEY = "ACUMEN_UNSURE_V1";
+
+function _normalizeQN(n){
+  const x = Number(n);
+  return Number.isFinite(x) ? x : String(n);
+}
+
+function _loadUnsureSet(){
+  try{
+    const raw = sessionStorage.getItem(UNSURE_KEY);
+    if (!raw) return new Set();
+    const arr = JSON.parse(raw);
+    if (!Array.isArray(arr)) return new Set();
+    return new Set(arr.map(_normalizeQN));
+  }catch{ return new Set(); }
+}
+
+function _saveUnsureSet(set){
+  try{
+    const arr = Array.from(set || []).map(_normalizeQN);
+    sessionStorage.setItem(UNSURE_KEY, JSON.stringify(arr));
+  }catch{}
+}
+
+function _ensureUnsure(state){
+  if (!state) return new Set();
+  if (state.unsureSet instanceof Set) return state.unsureSet;
+  if (Array.isArray(state.unsureSet)) {
+    state.unsureSet = new Set(state.unsureSet.map(_normalizeQN));
+    return state.unsureSet;
+  }
+  // lazy load once per state lifecycle
+  if (!state.__unsureLoaded){
+    state.__unsureLoaded = true;
+    state.unsureSet = _loadUnsureSet();
+    return state.unsureSet;
+  }
+  state.unsureSet = new Set();
+  return state.unsureSet;
+}
+
 
 // ================= PREVIEW (ŞABLON STÜDYO İŞARETİ) HELPERS =================
 function getStudioPreviewSrc(q){
@@ -205,6 +248,9 @@ export function renderExam(state){
   window.__APP_STATE = state;
   ensureQPreviewModalWired();
 
+  // "Emin değilim" state
+  const unsureSet = _ensureUnsure(state);
+
   const area = safe("examArea");
   if (!area) return;
   area.innerHTML = "";
@@ -256,6 +302,9 @@ export function renderExam(state){
     const correctLetter = (!isMulti && correctId) ? getCorrectDisplayLetter(q, correctId) : null;
     const hasKey = !!correctId;
 
+    const qnNorm = _normalizeQN(q.n);
+    const isUnsure = unsureSet.has(qnNorm) || unsureSet.has(String(q.n));
+
     const isCorrectNow = hasKey && !_isBlankChoice(chosen) && _isCorrectNow(q, chosen, correctId);
 
     // Rozet ve Skor Hesaplama
@@ -299,6 +348,11 @@ export function renderExam(state){
       `;
     }
 
+    // ? Toggle (Sadece sınav modunda buton; sonuçta rozet)
+    const unsureBtnHtml = (state.mode === "exam")
+      ? `<button class="unsureToggle ${isUnsure ? "on" : ""}" type="button" data-qn="${q.n}" title="Emin değilim" aria-label="Emin değilim">?</button>`
+      : (isUnsure ? `<span class="badge warn" title="Emin değilim">?</span>` : "");
+
     // Şablon Stüdyo işaretli soru görseli (varsa)
     const _previewSrc = getStudioPreviewSrc(q);
     const previewBtnHtml = _previewSrc ? `
@@ -324,6 +378,7 @@ export function renderExam(state){
         <div class="qNum">${q.n}.</div>
         <div style="display:flex; align-items:center; flex-wrap:wrap; gap:6px;">
           ${badge}${wbBadge}
+          ${unsureBtnHtml}
           <span class="badge subject-chip" id="subj-chip-${q.n}">${escapeHtml(getQuestionSubject(q))}</span>
           ${previewBtnHtml}
           ${aiBtnsHtml}
@@ -334,6 +389,28 @@ export function renderExam(state){
       <div id="ai-box-${q.n}" class="ai-box"></div>
       <div id="ai-gen-box-${q.n}" class="ai-challenge-box" style="display:none"></div>
     `;
+
+    // ? Event (Emin değilim) + Pin önerisi
+    const uBtn = qDiv.querySelector(".unsureToggle");
+    if (uBtn && state.mode === "exam"){
+      uBtn.addEventListener("click", ()=>{
+        const had = unsureSet.has(qnNorm) || unsureSet.has(String(q.n));
+        if (had){
+          unsureSet.delete(qnNorm);
+          unsureSet.delete(String(q.n));
+          uBtn.classList.remove("on");
+        } else {
+          unsureSet.add(qnNorm);
+          uBtn.classList.add("on");
+          // Scratchpad: sadece öneri üret (otomatik yazma yok)
+          try {
+            window.scratchpadSuggestPin?.(q.n, getQuestionSubject(q));
+          } catch {}
+        }
+        _saveUnsureSet(unsureSet);
+        try { refreshNavColors(state); } catch {}
+      });
+    }
 
     // AI Event Listeners
     if (showAi) {

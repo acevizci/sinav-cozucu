@@ -458,14 +458,23 @@ if (brandLogo) {
             setTimeout(() => {
                 // A. Uygulama hafızasını (LocalStorage) temizle
                try { 
-    if (typeof clearSaved === 'function') clearSaved(); 
-} catch (err) { 
-    // Log kaldırıldı
-}
+                    if (typeof clearSaved === 'function') clearSaved(); 
+                } catch (err) { 
+                    // Log kaldırıldı
+                }
                 
                 // Yedek temizlik (app.js'deki saveState key'i genelde 'acumen_state' olur)
                 localStorage.removeItem('acumen_state'); 
                 localStorage.removeItem('sinav_replay_key');
+
+                // ✅ EK: SessionStorage temizliği (scratchpad + emin değilim)
+                try { 
+                    // Eğer global reset fonksiyonların varsa (UI+store birlikte temizlesin)
+                    window.resetScratchpad?.({ silent:true }); 
+                } catch (e) {}
+
+                try { sessionStorage.removeItem('ACUMEN_SCRATCHPAD_V1'); } catch (e) {}
+                try { sessionStorage.removeItem('ACUMEN_UNSURE_V1'); } catch (e) {}
 
                 // B. Sayfayı yenile
                 window.location.reload();
@@ -481,3 +490,4 @@ if (brandLogo) {
         };
     };
 }
+

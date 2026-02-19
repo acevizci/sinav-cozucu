@@ -20,6 +20,80 @@ export function createExamFlow(ctx) {
   } = ctx;
 
   // -------------------------------------------------------------------------
+  // THEMED CONFIRM (modalOverlay + modalCard)
+  // -------------------------------------------------------------------------
+  function themedConfirm({
+    id = "customFinishModal",
+    title = "Onay",
+    message = "",
+    confirmText = "Evet",
+    cancelText = "Vazgeç",
+    icon = "⚠️",
+    danger = true,
+  } = {}) {
+    return new Promise((resolve) => {
+      // Varsa açık kalan eski modalı temizle
+      const old = document.getElementById(id);
+      if (old) old.remove();
+
+      const modal = document.createElement("div");
+      modal.id = id;
+      modal.className = "modalOverlay";
+      modal.style.display = "flex";
+      modal.style.zIndex = "100000";
+
+      const okBtnStyle = danger
+        ? "background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); box-shadow: 0 4px 12px rgba(220, 38, 38, 0.4);"
+        : "background: linear-gradient(135deg, rgba(168,85,247,0.95) 0%, rgba(59,130,246,0.95) 100%); box-shadow: 0 4px 12px rgba(168, 85, 247, 0.25);";
+
+      modal.innerHTML = `
+        <div class="modalCard" style="max-width: 420px; text-align: center; animation: popIn 0.3s cubic-bezier(0.18, 0.89, 0.32, 1.28);">
+          <div style="font-size: 42px; margin-bottom: 12px; filter: drop-shadow(0 4px 12px rgba(168,85,247,0.4));">${icon}</div>
+
+          <h3 class="modalTitle" style="margin-bottom: 8px; font-size: 20px;">${title}</h3>
+
+          <p class="modalSub" style="margin-bottom: 24px; line-height: 1.5; color: #a1a1aa; font-size: 14px;">
+            ${message}
+          </p>
+
+          <div class="modalActions" style="justify-content: center; gap: 12px; width: 100%;">
+            <button id="${id}__cancel" class="btn secondary"
+              style="flex:1; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1);">
+              ${cancelText}
+            </button>
+
+            <button id="${id}__ok" class="btn primary"
+              style="flex:1; ${okBtnStyle}">
+              ${confirmText}
+            </button>
+          </div>
+        </div>
+      `;
+
+      document.body.appendChild(modal);
+
+      const close = (val) => {
+        modal.style.opacity = "0";
+        setTimeout(() => {
+          try { modal.remove(); } catch {}
+          resolve(val);
+        }, 160);
+      };
+
+      const okBtn = document.getElementById(`${id}__ok`);
+      const cancelBtn = document.getElementById(`${id}__cancel`);
+
+      if (okBtn) okBtn.onclick = () => close(true);
+      if (cancelBtn) cancelBtn.onclick = () => close(false);
+
+      // Dışarı tıklayınca kapatma (cancel)
+      modal.onclick = (ev) => {
+        if (ev.target === modal) close(false);
+      };
+    });
+  }
+
+  // -------------------------------------------------------------------------
   // 1. DO PARSE: Dosyayı Okur, Ayrıştırır ve GEÇMİŞ HATALARI İŞLER
   // -------------------------------------------------------------------------
   async function doParse({ autoStartHint = true } = {}) {
@@ -75,22 +149,19 @@ export function createExamFlow(ctx) {
       // 🔥🔥🔥 KRİTİK EKLENTİ: GEÇMİŞ HATALARI SORGU LA 🔥🔥🔥
       // Bu blok sayesinde normal bir sınav yüklesen bile, daha önce yanlış yaptığın
       // soruların üzerinde "X. Kez Yanlış" rozeti çıkar.
-if (state.parsed.questions) {
-  state.parsed.questions.forEach(q => {
-    const rec = lookupWrongRecord(q);
-    if (rec) {
-      q._wrongCount = rec.wrongCount;
-      q._hash = rec.realKey;     // ✅ ileride remove/graduation için
-      q._wrongBlank = rec.blankCount || 0;
-    } else {
-      q._wrongCount = 0;
-      q._hash = null;
-    }
-  });
-}
-
-
-      // 🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥
+      if (state.parsed.questions) {
+        state.parsed.questions.forEach(q => {
+          const rec = lookupWrongRecord(q);
+          if (rec) {
+            q._wrongCount = rec.wrongCount;
+            q._hash = rec.realKey;     // ✅ ileride remove/graduation için
+            q._wrongBlank = rec.blankCount || 0;
+          } else {
+            q._wrongCount = 0;
+            q._hash = null;
+          }
+        });
+      }
 
       state.mode = "prep";
       state.answers.clear();
@@ -154,9 +225,55 @@ if (state.parsed.questions) {
   // -------------------------------------------------------------------------
   // 3. FINISH EXAM: Puanlar, Kaydeder ve TEMİZLİK YAPAR
   // -------------------------------------------------------------------------
-  function finishExam() {
+  async function finishExam() {
     if (!state.parsed) return;
-    
+
+    // ✅ Bitirmeden önce "boş soru" kontrolü
+    try {
+      const qs0 = state.parsed?.questions || [];
+      const blanks = [];
+
+      const getAns = (n) => {
+        if (state.answers instanceof Map) {
+          return state.answers.get(n) ?? state.answers.get(String(n)) ?? state.answers.get(Number(n));
+        }
+        return state.answers?.[n] ?? state.answers?.[String(n)];
+      };
+
+      const hasAnswer = (v) => {
+        if (v == null) return false;
+        if (typeof v === "string") return v.trim().length > 0;
+        if (Array.isArray(v)) return v.length > 0;
+        if (v instanceof Set) return v.size > 0;
+        if (typeof v === "object") return Object.keys(v).length > 0;
+        return !!v;
+      };
+
+      for (const q of qs0) {
+        const a = getAns(q?.n);
+        if (!hasAnswer(a)) blanks.push(q?.n);
+      }
+
+      if (blanks.length > 0) {
+        const preview = blanks.slice(0, 12).join(", ");
+        const more = blanks.length > 12 ? ` … (+${blanks.length - 12})` : "";
+
+        const ok = await themedConfirm({
+          id: "customFinishBlankModal",
+          title: "Boş soru var",
+          message: `<b>${blanks.length}</b> soru boş bırakılmış görünüyor.<br/>
+                    Boş sorular: <b>${preview}${more}</b><br/><br/>
+                    Yine de sınavı bitirmek istediğinden emin misin?`,
+          confirmText: "Evet, Bitir",
+          cancelText: "Geri dön",
+          icon: "⚠️",
+          danger: true,
+        });
+
+        if (!ok) return; // kullanıcı geri döndü → bitirme iptal
+      }
+    } catch (e) {}
+
     state.mode = "result";
     
     // Studio Sync (Global değişken kontrolü)

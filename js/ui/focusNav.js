@@ -173,6 +173,13 @@ export function refreshFocusMiniNav(state){
     btn.className = "navDot";
     if (isActive) btn.classList.add("active");
 
+    // Unsure flag
+    try{
+      const raw = state?.unsureSet;
+      const set = (raw instanceof Set) ? raw : null;
+      if (set && set.has(qn)) btn.classList.add("unsure");
+    }catch{}
+
     if (isResult) {
       const given = getGiven(qn);
 

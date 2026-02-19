@@ -1983,7 +1983,36 @@ body:not(.light-mode):not(.sepia-mode) .d-toggle-btn{
 }.status-indicator.ready {
   background: #10b981 !important; /* Başarılı yeşili */
   box-shadow: 0 0 10px rgba(16, 185, 129, 0.6) !important;
-}/* Tabs (Kapsül Tasarım) *//* Dropzone (Dosya Alanı) */.modern-dropzone{
+}
+.status-indicator.loading{
+  background: #3b82f6 !important;
+  box-shadow: 0 0 10px rgba(59, 130, 246, 0.55) !important;
+}
+.status-indicator.running{
+  background: #ef4444 !important;
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.55) !important;
+}
+.status-indicator.finished{
+  background: #a855f7 !important;
+  box-shadow: 0 0 10px rgba(168, 85, 247, 0.55) !important;
+}
+
+/* Label rengi (Kontrol Merkezi) */
+#parseStatus.ready{ color:#10b981 !important; }
+#parseStatus.loading{ color:#3b82f6 !important; }
+#parseStatus.running{ color:#ef4444 !important; }
+#parseStatus.finished{ color:#a855f7 !important; }
+
+body.light-mode #parseStatus.ready,
+body.sepia-mode #parseStatus.ready{ color:#0f766e !important; }
+body.light-mode #parseStatus.loading,
+body.sepia-mode #parseStatus.loading{ color:#1d4ed8 !important; }
+body.light-mode #parseStatus.running,
+body.sepia-mode #parseStatus.running{ color:#b91c1c !important; }
+body.light-mode #parseStatus.finished,
+body.sepia-mode #parseStatus.finished{ color:#7c3aed !important; }
+
+/* Tabs (Kapsül Tasarım) *//* Dropzone (Dosya Alanı) */.modern-dropzone{
   border: 2px dashed var(--w-15);
   border-radius: var(--r-2xl);
   padding: 10px 10px;
@@ -5247,4 +5276,492 @@ body.sepia-mode{
   padding: 8px 10px;
   font-size: 11px;
   border-radius: 12px;
+}
+
+/* =====================================================
+   UNSURE FLAG ("Emin değilim") UI
+===================================================== */
+.btn-unsure{
+  width:24px;
+  height:24px;
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,.16);
+  background:rgba(255,255,255,.05);
+  color:rgba(255,255,255,.72);
+  font-size:13px;
+  font-weight:800;
+  line-height:1;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  cursor:pointer;
+  transition:transform .15s ease, background .15s ease, border-color .15s ease, box-shadow .15s ease, color .15s ease;
+}
+.btn-unsure:hover{
+  transform:translateY(-1px);
+  background:rgba(255,255,255,.10);
+  border-color:rgba(255,255,255,.22);
+}
+.btn-unsure.active{
+  background:rgba(245,158,11,.20);
+  border-color:rgba(245,158,11,.55);
+  color:#ffd199;
+  box-shadow:0 0 14px rgba(245,158,11,.25);
+}
+
+/* Nav grid button highlight */
+.navBtn.unsure{
+  border-color: rgba(245,158,11,.55) !important;
+  box-shadow: 0 0 0 1px rgba(245,158,11,.20) inset;
+  position: relative;
+}
+.navBtn.unsure::after{
+  content:"?";
+  position:absolute;
+  top:-6px;
+  right:-6px;
+  width:16px;
+  height:16px;
+  border-radius:999px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:11px;
+  font-weight:900;
+  color:#111;
+  background: rgba(245,158,11,.95);
+  box-shadow: 0 6px 14px rgba(0,0,0,.25);
+}
+
+/* Focus mini nav dot */
+.navDot.unsure{
+  border-color: rgba(245,158,11,.55) !important;
+  box-shadow: 0 0 0 1px rgba(245,158,11,.20) inset;
+  position: relative;
+}
+.navDot.unsure::after{
+  content:"?";
+  position:absolute;
+  top:-7px;
+  right:-7px;
+  width:14px;
+  height:14px;
+  border-radius:999px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:10px;
+  font-weight:900;
+  color:#111;
+  background: rgba(245,158,11,.95);
+  box-shadow: 0 6px 14px rgba(0,0,0,.25);
+}
+
+/* Unsure list in nav panel */
+.unsureList{
+  margin: 10px 10px 6px 10px;
+  padding: 10px;
+  border-radius: 14px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.10);
+  backdrop-filter: blur(10px);
+}
+.unsureListTop{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  margin-bottom:8px;
+}
+.unsureListTitle{
+  font-size:12px;
+  letter-spacing:.2px;
+  opacity:.9;
+}
+.unsureListCount{
+  font-size:12px;
+  font-weight:800;
+  color:#f59e0b;
+  background: rgba(245,158,11,.14);
+  border: 1px solid rgba(245,158,11,.25);
+  padding: 3px 8px;
+  border-radius: 999px;
+}
+.unsureListGrid{
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px;
+}
+.unsureChip{
+  min-width:34px;
+  height:28px;
+  padding:0 10px;
+  border-radius:999px;
+  border:1px solid rgba(245,158,11,.35);
+  background: rgba(245,158,11,.10);
+  color: rgba(255,255,255,.88);
+  cursor:pointer;
+  font-weight:700;
+  font-size:12px;
+  transition: transform .15s ease, background .15s ease, box-shadow .15s ease;
+}
+.unsureChip:hover{
+  transform: translateY(-1px);
+  background: rgba(245,158,11,.16);
+  box-shadow: 0 10px 18px rgba(245,158,11,.10);
+}
+
+/* Light / Sepia */
+body.light-mode .btn-unsure,
+body.sepia-mode .btn-unsure{
+  border-color: rgba(0,0,0,.10);
+  background: rgba(0,0,0,.03);
+  color: rgba(0,0,0,.55);
+}
+body.light-mode .btn-unsure.active,
+body.sepia-mode .btn-unsure.active{
+  background: rgba(245,158,11,.18);
+  border-color: rgba(245,158,11,.40);
+  color: rgba(0,0,0,.75);
+}
+body.light-mode .unsureList,
+body.sepia-mode .unsureList{
+  background: rgba(0,0,0,0.03);
+  border-color: rgba(0,0,0,0.08);
+}
+body.light-mode .unsureChip,
+body.sepia-mode .unsureChip{
+  color: rgba(0,0,0,.75);
+}
+
+
+/* ===== ACUMEN SCRATCHPAD (Karalama) ===== */
+.scratchpad-fab{
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 9999;
+  display: none; /* sadece sınavda */
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--w-12, rgba(255,255,255,.12));
+  background: var(--glass, rgba(20,20,24,.55));
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: var(--text, #e5e7eb);
+  cursor: pointer;
+  box-shadow: 0 14px 40px rgba(0,0,0,.35);
+  transition: transform .12s ease, background .12s ease, border-color .12s ease;
+  user-select: none;
+}
+.scratchpad-fab:hover{
+  transform: translateY(-2px);
+  border-color: rgba(168,85,247,.35);
+  background: rgba(24,24,28,.62);
+}
+.scratchpad-fab .ico{
+  width: 18px;height: 18px; display:inline-flex; align-items:center; justify-content:center;
+  opacity: .95;
+  filter: drop-shadow(0 0 10px rgba(168,85,247,.25));
+}
+.scratchpad-fab .txt{
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .2px;
+  opacity: .92;
+}
+
+.scratchpad-panel{
+  position: fixed;
+  right: 18px;
+  bottom: 70px;
+  width: min(460px, calc(100vw - 36px));
+  height: min(52vh, 520px);
+  z-index: 9999;
+  display: none;
+  border-radius: 18px;
+  border: 1px solid var(--w-12, rgba(255,255,255,.12));
+  background: rgba(15,15,18,.72);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 22px 60px rgba(0,0,0,.55);
+  overflow: hidden;
+}
+.scratchpad-top{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap: 10px;
+  padding: 12px 12px 10px;
+  border-bottom: 1px solid rgba(255,255,255,.08);
+  background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,0));
+}
+.scratchpad-title{
+  display:flex; align-items:center; gap:8px;
+  font-weight: 900;
+  font-size: 12px;
+  letter-spacing: .4px;
+  color: var(--text, #e5e7eb);
+  opacity: .95;
+}
+.scratchpad-actions{ display:flex; align-items:center; gap:8px; }
+.scratchpad-btn{
+  border: 1px solid rgba(255,255,255,.10);
+  background: rgba(255,255,255,.06);
+  color: var(--text, #e5e7eb);
+  border-radius: 999px;
+  padding: 7px 10px;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: transform .12s ease, border-color .12s ease, background .12s ease;
+}
+.scratchpad-btn:hover{
+  transform: translateY(-1px);
+  border-color: rgba(168,85,247,.35);
+  background: rgba(168,85,247,.10);
+}
+.scratchpad-area{
+  height: calc(100% - 46px);
+  padding: 12px;
+}
+.scratchpad-text{
+  width: 100%;
+  height: 100%;
+  resize: none;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,.08);
+  background: rgba(0,0,0,.20);
+  color: var(--text, #e5e7eb);
+  padding: 12px 12px;
+  font-size: 13px;
+  line-height: 1.45;
+  outline: none;
+}
+.scratchpad-text:focus{
+  border-color: rgba(168,85,247,.38);
+  box-shadow: 0 0 0 2px rgba(168,85,247,.16);
+}
+.scratchpad-text::placeholder{
+  color: rgba(229,231,235,.55);
+}
+
+/* Light/Sepya uyumu */
+body.light-mode .scratchpad-panel,
+body.sepia-mode .scratchpad-panel{
+  background: rgba(255,255,255,.78);
+  border-color: rgba(0,0,0,.10);
+}
+body.light-mode .scratchpad-top,
+body.sepia-mode .scratchpad-top{
+  border-bottom-color: rgba(0,0,0,.08);
+  background: linear-gradient(180deg, rgba(0,0,0,.04), rgba(0,0,0,0));
+}
+body.light-mode .scratchpad-title,
+body.sepia-mode .scratchpad-title{
+  color: var(--text-main, #111827);
+}
+body.light-mode .scratchpad-text,
+body.sepia-mode .scratchpad-text{
+  background: rgba(255,255,255,.70);
+  border-color: rgba(0,0,0,.10);
+  color: var(--text-main, #111827);
+}
+body.light-mode .scratchpad-btn,
+body.sepia-mode .scratchpad-btn,
+body.light-mode .scratchpad-fab,
+body.sepia-mode .scratchpad-fab{
+  color: var(--text-main, #111827);
+  border-color: rgba(0,0,0,.12);
+  background: rgba(255,255,255,.70);
+}
+
+
+/* ===== SCRATCHPAD ===== */
+
+.sp-btn{
+  position:fixed;
+  left:20px;
+  top:130px;
+  z-index:9999;
+  display:none;
+  padding:8px 12px;
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,.15);
+  background:rgba(20,20,24,.6);
+  color:white;
+  cursor:pointer;
+}
+
+.sp-panel{
+  position:fixed;
+  left:20px;
+  top:180px;
+  width:340px;
+  height:460px;
+  background:rgba(20,20,24,.85);
+  border:1px solid rgba(255,255,255,.12);
+  border-radius:16px;
+  z-index:9999;
+  display:none;
+  padding:10px;
+}
+
+.sp-panel.open{
+  display:block;
+}
+
+.sp-top{
+  display:flex;
+  justify-content:space-between;
+  margin-bottom:8px;
+}
+
+.sp-text{
+  width:100%;
+  height:70px;
+  margin-bottom:8px;
+  background:rgba(255,255,255,.05);
+  border:1px solid rgba(255,255,255,.1);
+  color:white;
+}
+
+.sp-canvasWrap{
+  width:100%;
+  height:260px;
+  background:rgba(255,255,255,.03);
+  border:1px solid rgba(255,255,255,.1);
+}
+
+.sp-canvas{
+  width:100%;
+  height:100%;
+}
+
+
+/* Scratchpad minimal UI (non-breaking) */
+.filter-chip.scratchpad{ display:inline-flex; align-items:center; gap:8px; }
+.filter-chip.scratchpad .sp-ico{ font-size:14px; line-height:1; }
+
+.scratchpadOverlay{
+  position:fixed; inset:0;
+  display:none; align-items:center; justify-content:center;
+  background:rgba(0,0,0,.72);
+  z-index:10000;
+}
+.scratchpadCard{
+  width:min(760px, calc(100vw - 28px));
+  border-radius:18px;
+  border:1px solid var(--stroke);
+  background: rgba(20,22,30,0.92);
+backdrop-filter: blur(14px);
+
+  box-shadow:0 24px 70px rgba(0,0,0,.55);
+  padding:12px;
+}
+.scratchpadTop{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.scratchpadTitle{ display:flex; align-items:center; gap:10px; font-weight:900; }
+.scratchpadTopBtns{ display:flex; gap:8px; }
+.spIconBtn{
+  width:34px; height:34px; border-radius:12px;
+  border:1px solid var(--stroke);
+  background:rgba(255,255,255,.04);
+  color:var(--text);
+  cursor:pointer;
+}
+.scratchpadTabs{ display:flex; gap:8px; margin:10px 0; }
+.scratchpadTab{
+  padding:8px 12px; border-radius:12px;
+  border:1px solid var(--stroke);
+  background:rgba(255,255,255,.04);
+  color:var(--text); cursor:pointer; font-weight:800; font-size:12px;
+}
+.scratchpadTab.is-active{ border-color:rgba(168,85,247,.45); background:rgba(168,85,247,.12); }
+.scratchpadPane{ display:none; }
+.scratchpadPane.is-active{ display:block; }
+.spTools{ display:flex; gap:8px; margin-bottom:10px; flex-wrap:wrap; }
+.spTool{
+  padding:7px 10px; border-radius:12px;
+  border:1px solid var(--stroke);
+  background:rgba(255,255,255,.04);
+  color:var(--text); cursor:pointer; font-weight:800; font-size:12px;
+}
+.spTool.is-active{ border-color:rgba(34,197,94,.35); background:rgba(34,197,94,.10); }
+.spTool.warn{ border-color:rgba(255,69,58,.35); background:rgba(255,69,58,.10); }
+.spCanvasWrap{
+  height:360px;
+  border-radius:16px;
+  border:1px solid var(--stroke);
+  background:rgba(255,255,255,.03);
+  overflow:hidden;
+}
+#scratchpadCanvas{ width:100%; height:100%; display:block; touch-action:none; }
+.spTextarea{
+  width:100%; height:360px; resize:none;
+  border-radius:16px; border:1px solid var(--stroke);
+  background:rgba(255,255,255,.03);
+  color:var(--text);
+  padding:12px;
+}
+
+
+/* --- Emin Değilim (? ) butonu: sadece bu class'ları etkiler --- */
+.btn-unsure{
+  width: 28px;
+  height: 28px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(255,255,255,0.05);
+  color: #facc15;
+  font-weight: 900;
+  cursor: pointer;
+  transition: .18s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-unsure:hover{
+  background: rgba(250,204,21,0.12);
+  border-color: rgba(250,204,21,0.35);
+}
+
+.btn-unsure.active{
+  background: rgba(250,204,21,0.18);
+  border-color: rgba(250,204,21,0.55);
+  box-shadow: 0 0 0 2px rgba(250,204,21,0.18);
+}
+
+
+/* ==========================
+   Emin Değilim (?) Toggle
+   - badge/pill görünümüyle uyumlu
+   ========================== */
+.unsureToggle{
+  padding: 4px 8px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--stroke);
+  background: var(--glass);
+  color: var(--muted);
+  font-size: var(--fs-11);
+  font-weight: 900;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  user-select: none;
+  height: auto;
+  min-height: 0;
+}
+.unsureToggle:hover{
+  filter: brightness(1.08);
+  border-color: rgba(255,255,255,.18);
+}
+.unsureToggle.on{
+  border-color: var(--warn);
+  color: #ffe7b3;
+  background: rgba(255,159,10,.15);
 }

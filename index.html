@@ -140,7 +140,7 @@
             </div>
             <div class="dropdown-item" id="btnLogout">
                 <span class="item-icon">🚪</span>
-                <span class="item-text">Çıkış</span>
+              
             </div>
         </div>
         </div>
@@ -467,6 +467,12 @@
       </div>
     </div>
 
+<button id="btnScratchpad" class="filter-chip scratchpad" type="button" title="Karalama / Notlar (W)">
+  <span class="sp-ico" aria-hidden="true">✍</span>
+  <span>Karalama Defteri</span>
+</button>
+
+
     <div class="toolbar" id="resultTools" style="display:none;">
       <label class="filter-chip wrong">
         <input id="showOnlyWrong" type="checkbox"> 
@@ -536,6 +542,8 @@
 </script>
 
 <script type="module" src="./js/app.js"></script>
+
+<script type="module" src="./js/ui/scratchpad.js"></script>
 
 <script>
   // Accessible Tabs (replaces inline onclick; keeps switchTab() for compatibility)
@@ -998,5 +1006,50 @@
     </div>
   </div>
 </div>
+
+<div id="scratchpadOverlay" class="scratchpadOverlay" style="display:none;" aria-hidden="true">
+  <div class="scratchpadCard" role="dialog" aria-modal="true" aria-label="Karalama Alanı">
+    <div class="scratchpadTop">
+      <div class="scratchpadTitle">
+        <span class="scratchpadTitleIco" aria-hidden="true">✍</span>
+        <span>Karalama</span>
+      </div>
+
+      <div class="scratchpadTopBtns">
+        <button id="btnScratchpadPin" class="spIconBtn" type="button" title="Pin önerisini ekle">📌</button>
+        <button id="btnScratchpadClose" class="spIconBtn" type="button" title="Kapat">✕</button>
+      </div>
+    </div>
+
+    <div class="scratchpadTabs" role="tablist" aria-label="Karalama sekmeleri">
+      <button class="scratchpadTab is-active" type="button" role="tab" aria-selected="true" data-tab="draw">Çizim</button>
+      <button class="scratchpadTab" type="button" role="tab" aria-selected="false" data-tab="text">Not</button>
+    </div>
+
+    <div class="scratchpadBody">
+      <div class="scratchpadPane is-active" data-pane="draw">
+        <div class="spTools">
+          <button id="spPen" class="spTool is-active" type="button">Kalem</button>
+          <button id="spEraser" class="spTool" type="button">Silgi</button>
+          <button id="spUndo" class="spTool" type="button">Geri</button>
+          <button id="spClear" class="spTool warn" type="button">Temizle</button>
+        </div>
+        <div class="spCanvasWrap">
+          <canvas id="scratchpadCanvas"></canvas>
+        </div>
+      </div>
+
+      <div class="scratchpadPane" data-pane="text">
+        <div class="spTools">
+          <button id="spCopy" class="spTool" type="button">Kopyala</button>
+          <button id="spClearText" class="spTool warn" type="button">Temizle</button>
+        </div>
+        <textarea id="scratchpadText" class="spTextarea" placeholder="Kısa not / eliminasyon (örn: B-C arasında)"></textarea>
+      </div>
+    </div>
+  </div>
+</div>
+
+
 </body>
 </html>

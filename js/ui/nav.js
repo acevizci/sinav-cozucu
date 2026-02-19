@@ -4,6 +4,70 @@ import { safe } from "./shared.js";
 import { getChosenOptionId } from "./shared.js";
 import { renderFocusMiniNav } from "./focusNav.js";
 
+// ================= UNSURE LIST ("Emin değilim") =================
+function _getUnsureSet(state){
+  const raw = state?.unsureSet;
+  if (raw instanceof Set) return raw;
+  const arr = Array.isArray(raw) ? raw : [];
+  const s = new Set(arr.map(Number).filter(n => Number.isFinite(n) && n > 0));
+  if (state) state.unsureSet = s;
+  return s;
+}
+
+function renderUnsureList(state){
+  const panel = document.getElementById("navPanel");
+  if (!panel) return;
+
+  let host = document.getElementById("unsureList");
+  if (!host){
+    host = document.createElement("div");
+    host.id = "unsureList";
+    host.className = "unsureList";
+    // place near top of panel
+    panel.prepend(host);
+  }
+
+  const s = _getUnsureSet(state);
+  const items = Array.from(s).sort((a,b)=>a-b);
+
+  if (!items.length){
+    host.style.display = "none";
+    host.innerHTML = "";
+    return;
+  }
+
+  host.style.display = "block";
+  host.innerHTML = `
+    <div class="unsureListTop">
+      <span class="unsureListTitle">Emin değilim</span>
+      <span class="unsureListCount">${items.length}</span>
+    </div>
+    <div class="unsureListGrid"></div>
+  `;
+
+  const grid = host.querySelector(".unsureListGrid");
+  if (!grid) return;
+
+  items.slice(0, 60).forEach(qn=>{
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "unsureChip";
+    b.textContent = String(qn);
+    b.onclick = ()=>{
+      state.activeQn = qn;
+      if (document.body.classList.contains("focusMode")) {
+        const PAGE_SIZE = 20;
+        state.navPage = Math.floor((qn - 1) / PAGE_SIZE);
+      }
+      const target = document.querySelector(`.q[data-q="${qn}"]`);
+      if (target) target.scrollIntoView({behavior:"smooth", block:"start"});
+      refreshNavColors(state);
+    };
+    grid.appendChild(b);
+  });
+}
+
+
 export function buildNav(state){
   const grid = document.getElementById("navGrid");
   const panel = document.getElementById("navPanel");
@@ -27,6 +91,7 @@ export function buildNav(state){
 
   // Orijinal akış (aynı)
   if (grid.childElementCount === total) {
+    renderUnsureList(state);
     refreshNavColors(state);
     return;
   }
@@ -57,8 +122,10 @@ export function buildNav(state){
     grid.appendChild(b);
   }
 
+  renderUnsureList(state);
   refreshNavColors(state);
 }
+
 
 
 export function refreshNavColors(state) {
@@ -92,6 +159,13 @@ export function refreshNavColors(state) {
     btn.className = "navBtn";
 
     if (qn === activeQn) btn.classList.add("active");
+
+    // Unsure flag
+    try{
+      const s = state?.unsureSet;
+      const set = (s instanceof Set) ? s : null;
+      if (set && set.has(qn)) btn.classList.add("unsure");
+    }catch{}
 
     // (senin orijinal mantığın aynen)
     const hasAnswer = answers.has(qn) && answers.get(qn) !== null;
