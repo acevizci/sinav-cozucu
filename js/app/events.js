@@ -1346,6 +1346,8 @@ function clearDriveError(){
           icon = "📝";
       }
 
+      const badge = (f.mimeType === "application/pdf") ? '<span class="driveX-badge"><span class="dot"></span>PDF → Stüdyo</span>' : "";
+
       return `
         <div class="driveX-item" 
              data-id="${f.id}" 
@@ -1356,7 +1358,7 @@ function clearDriveError(){
           <div style="display:flex; gap:10px; align-items:center;">
             <div class="driveX-icon-box">${icon}</div>
             <div>
-              <div class="driveX-name">${escapeHtml(f.name||"(adsız)")}</div>
+              <div class="driveX-name">${escapeHtml(f.name||"(adsız)")}${badge}</div>
               <div class="driveX-meta">${escapeHtml(humanMime(f.mimeType))}</div>
             </div>
           </div>

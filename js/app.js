@@ -20,6 +20,8 @@ import {
 // AI Fonksiyonları
 import { runGeminiAnalysis, runGeminiGenerator, updateAiKeyBadges, ensureGeminiKeyOnEntry } from "./ui/ai.js";
 
+import { initOnboarding } from "./ui/onboarding.js";
+
 import { listMyDriveBooklets, listFolderBooklets, fetchDriveFileAsFileOrText } from "./drive.js";
 import { bindRenderContext, paintAll } from "./app/render.js";
 import { createExamFlow } from "./app/examFlow.js";
@@ -386,7 +388,11 @@ try {
 initTheme();           
 startPatiMotivation(); 
 restore();             
-setStatus({ id:"STATUS_READY" });    
+setStatus({ id:"STATUS_READY" }); 
+
+// First-run onboarding tour
+try { initOnboarding(); } catch (e) {}
+    
 
 (function handleReportReplay(){
   try {

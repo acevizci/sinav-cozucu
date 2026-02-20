@@ -5765,3 +5765,481 @@ backdrop-filter: blur(14px);
   color: #ffe7b3;
   background: rgba(255,159,10,.15);
 }
+
+/* ================= ACUMEN Onboarding Tour ================= */
+
+/* Theme-aware tokens */
+:root{
+  --tour-overlay: rgba(0,0,0,.55);
+  --tour-overlay-shadow: rgba(0,0,0,.35);
+  --tour-card-bg: rgba(18,18,20,.74);
+  --tour-card-border: rgba(255,255,255,.14);
+  --tour-card-shadow: 0 16px 60px rgba(0,0,0,.45);
+
+  --tour-text: rgba(255,255,255,.92);
+  --tour-muted: rgba(255,255,255,.82);
+
+  --tour-btn-bg: rgba(255,255,255,.06);
+  --tour-btn-bg-ghost: rgba(255,255,255,.04);
+  --tour-btn-border: rgba(255,255,255,.12);
+
+  --tour-primary-bg: var(--accent);
+  --tour-primary-text: #fff;
+
+  --tour-chip-bg: rgba(255,255,255,.04);
+  --tour-chip-border: rgba(255,255,255,.10);
+
+  --tour-tip-bg: rgba(18,18,26,.82);
+  --tour-tip-border: rgba(255,255,255,.14);
+  --tour-tip-shadow: 0 18px 60px rgba(0,0,0,.35);
+}
+
+/* Light/Sepia overrides to match existing theme modes */
+body.light-mode{
+  --tour-overlay: rgba(0,0,0,.38);
+  --tour-overlay-shadow: rgba(0,0,0,.16);
+  --tour-card-bg: rgba(255,255,255,.92);
+  --tour-card-border: rgba(0,0,0,.10);
+  --tour-card-shadow: 0 16px 60px rgba(0,0,0,.18);
+
+  --tour-text: var(--text-main);
+  --tour-muted: var(--text-muted);
+
+  --tour-btn-bg: rgba(0,0,0,.04);
+  --tour-btn-bg-ghost: rgba(0,0,0,.03);
+  --tour-btn-border: rgba(0,0,0,.10);
+
+  --tour-primary-text: #fff;
+
+  --tour-chip-bg: rgba(0,0,0,.03);
+  --tour-chip-border: rgba(0,0,0,.08);
+
+  --tour-tip-bg: rgba(255,255,255,.94);
+  --tour-tip-border: rgba(0,0,0,.10);
+  --tour-tip-shadow: 0 18px 60px rgba(0,0,0,.18);
+}
+
+body.sepia-mode{
+  --tour-overlay: rgba(91,70,54,.34);
+  --tour-overlay-shadow: rgba(91,70,54,.14);
+  --tour-card-bg: rgba(253,246,227,.92);
+  --tour-card-border: rgba(91,70,54,.14);
+  --tour-card-shadow: 0 16px 60px rgba(91,70,54,.16);
+
+  --tour-text: var(--text-main);
+  --tour-muted: var(--text-muted);
+
+  --tour-btn-bg: rgba(91,70,54,.06);
+  --tour-btn-bg-ghost: rgba(91,70,54,.05);
+  --tour-btn-border: rgba(91,70,54,.14);
+
+  --tour-primary-text: #fff;
+
+  --tour-chip-bg: rgba(91,70,54,.05);
+  --tour-chip-border: rgba(91,70,54,.14);
+
+  --tour-tip-bg: rgba(253,246,227,.94);
+  --tour-tip-border: rgba(91,70,54,.14);
+  --tour-tip-shadow: 0 18px 60px rgba(91,70,54,.18);
+}
+
+#acumenTourRoot{
+  position: fixed;
+  inset: 0;
+  z-index: 999999;
+  pointer-events: none;
+  font-family: inherit;
+}
+
+#acumenTourRoot .acumenTourSpot{
+  position: fixed;
+  border-radius: 16px;
+  box-shadow:
+    0 0 0 9999px var(--tour-overlay),
+    0 12px 50px var(--tour-overlay-shadow);
+  border: 1px solid var(--tour-card-border);
+  pointer-events: none;
+  transition: all .18s ease;
+}
+
+#acumenTourRoot .acumenTourCard{
+  position: fixed;
+  width: min(420px, calc(100vw - 28px));
+  border-radius: 18px;
+  background: var(--tour-card-bg);
+  border: 1px solid var(--tour-card-border);
+  box-shadow: var(--tour-card-shadow);
+  padding: 14px 14px 12px;
+  pointer-events: auto;
+  transform: translateZ(0);
+  animation: acumenTourPop .22s ease;
+
+
+/* Tooltip arrow (theme-aware) */
+.acumenTourCard::after{
+  content:"";
+  position:absolute;
+  width: 14px;
+  height: 14px;
+  background: var(--tour-card-bg);
+  border-right: 1px solid var(--tour-card-border);
+  border-bottom: 1px solid var(--tour-card-border);
+  transform: rotate(45deg);
+  filter: drop-shadow(0 10px 20px var(--tour-overlay-shadow));
+  opacity: .96;
+}
+
+/* Default placement: bottom (arrow on top) */
+.acumenTourCard[data-place="bottom"]::after{
+  top: -7px;
+  left: 28px;
+}
+
+/* Arrow on bottom */
+.acumenTourCard[data-place="top"]::after{
+  bottom: -7px;
+  left: 28px;
+  transform: rotate(225deg);
+}
+
+/* Arrow on left/right */
+.acumenTourCard[data-place="left"]::after{
+  right: -7px;
+  top: 34px;
+  transform: rotate(135deg);
+}
+.acumenTourCard[data-place="right"]::after{
+  left: -7px;
+  top: 34px;
+  transform: rotate(-45deg);
+}
+}
+
+@keyframes acumenTourPop{
+  from{ opacity: 0; transform: translateY(8px) scale(.985); }
+  to{ opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce){
+  #acumenTourRoot .acumenTourCard{ animation: none; }
+}
+
+@supports (backdrop-filter: blur(12px)){
+  #acumenTourRoot .acumenTourCard{
+    backdrop-filter: blur(14px);
+  }
+}
+
+#acumenTourRoot .acumenTourTop{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:10px;
+  margin-bottom:8px;
+}
+
+#acumenTourRoot .acumenTourMeta{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  flex: 0 0 auto;
+}
+
+#acumenTourRoot .acumenTourStep{
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--tour-chip-border);
+  background: var(--tour-chip-bg);
+  color: var(--tour-muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .2px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+/* Premium pulse for important CTAs during tour */
+.acumenPulse{
+  animation: acumenPulse 1.25s ease-in-out infinite;
+}
+
+@keyframes acumenPulse{
+  0%{ box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 38%, transparent); transform: translateZ(0); }
+  60%{ box-shadow: 0 0 0 10px transparent; }
+  100%{ box-shadow: 0 0 0 0 transparent; }
+}
+
+@media (prefers-reduced-motion: reduce){
+  .acumenPulse{ animation: none; }
+}
+
+#acumenTourRoot .acumenTourHeading{
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+  min-width: 0;
+}
+
+#acumenTourRoot .acumenTourMascot{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  padding: 5px 10px;
+  width: fit-content;
+  border-radius: 999px;
+  border: 1px solid var(--tour-chip-border);
+  background: var(--tour-chip-bg);
+  color: var(--tour-muted);
+  font-size: 11px;
+  line-height: 1;
+}
+
+#acumenTourRoot .acumenTourMascotIcon{
+  font-size: 14px;
+  line-height: 1;
+}
+
+#acumenTourRoot .acumenTourMascotName{
+  font-weight: 850;
+  letter-spacing: .15px;
+}
+
+#acumenTourRoot .acumenTourTitle{
+  font-weight: 800;
+  font-size: 14px;
+  letter-spacing: .2px;
+  color: var(--tour-text);
+}
+
+#acumenTourRoot .acumenTourX{
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
+  border: 1px solid var(--tour-btn-border);
+  background: var(--tour-btn-bg);
+  color: var(--tour-text);
+  cursor: pointer;
+}
+
+
+.acumenTourMode{
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid var(--tour-chip-border);
+  background: var(--tour-chip-bg);
+  color: var(--tour-text);
+  font-size: 11px;
+  letter-spacing: .2px;
+  cursor: pointer;
+}
+#acumenTourRoot .acumenTourMode:hover{ filter: brightness(1.08); }
+
+.acumenTourBtn.mini{
+  padding: 8px 10px;
+  font-size: 11px;
+}
+
+#acumenTourRoot .acumenTourX:hover{
+  filter: brightness(1.06);
+}
+
+#acumenTourRoot .acumenTourBody{
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--tour-muted);
+  margin-bottom: 10px;
+  white-space: pre-wrap;
+}
+
+#acumenTourRoot .acumenTourBottom{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+}
+
+#acumenTourRoot .acumenTourDots{
+  display:flex;
+  gap:6px;
+  align-items:center;
+}
+
+#acumenTourRoot .acumenTourDot{
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--tour-text) 22%, transparent);
+}
+
+#acumenTourRoot .acumenTourDot.is-on{
+  background: color-mix(in srgb, var(--tour-text) 78%, transparent);
+}
+
+#acumenTourRoot .acumenTourBtns{
+  display:flex;
+  gap:8px;
+  align-items:center;
+}
+
+#acumenTourRoot .acumenTourBtn{
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 12px;
+  border: 1px solid var(--tour-btn-border);
+  background: var(--tour-btn-bg);
+  color: var(--tour-text);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+#acumenTourRoot .acumenTourBtn:hover{
+  filter: brightness(1.06);
+}
+
+#acumenTourRoot .acumenTourBtn.primary{
+  background: var(--tour-primary-bg);
+  border-color: color-mix(in srgb, var(--tour-primary-bg) 72%, transparent);
+  color: var(--tour-primary-text);
+  font-weight: 850;
+}
+
+#acumenTourRoot .acumenTourBtn.ghost{
+  background: var(--tour-btn-bg-ghost);
+}
+
+#acumenTourRoot .acumenTourBtn:disabled{
+  opacity: .45;
+  cursor: not-allowed;
+  filter: none;
+}
+
+/* Small helper button next to theme toggle */
+.tour-btn-icon{
+  margin-left: 8px;
+  opacity: .95;
+}
+
+/* Tour: "show only once" checkbox — smaller + cleaner */
+#acumenTourRoot .acumenTourOnce{
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 6px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--tour-chip-border);
+  background: var(--tour-chip-bg);
+  color: var(--tour-muted);
+  font-size: 11px;
+  pointer-events: auto;
+  user-select: none;
+}
+
+#acumenTourRoot .acumenTourOnce span{
+  line-height: 1.2;
+}
+
+#acumenTourRoot .acumenTourOnceChk{
+  width: 14px;
+  height: 14px;
+  accent-color: var(--accent);
+}
+
+/* ================= ACUMEN Contextual Tips ================= */
+
+.acumenTip{
+  position: fixed;
+  z-index: 999998;
+  width: min(360px, calc(100vw - 24px));
+  padding: 14px 14px 12px;
+  border-radius: 16px;
+  border: 1px solid var(--tour-tip-border);
+  background: var(--tour-tip-bg);
+  backdrop-filter: blur(10px);
+  box-shadow: var(--tour-tip-shadow);
+  color: var(--tour-text);
+}
+
+.acumenTipHead{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  margin-bottom: 6px;
+}
+
+.acumenTipMascot{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--tour-chip-border);
+  background: var(--tour-chip-bg);
+  color: var(--tour-muted);
+  font-size: 11px;
+  line-height: 1;
+}
+
+.acumenTipMascotIcon{ font-size: 14px; line-height: 1; }
+.acumenTipMascotName{ font-weight: 850; letter-spacing: .15px; }
+
+.acumenTipTitle{
+  font-weight: 850;
+  letter-spacing: .2px;
+  margin-bottom: 0;
+  color: var(--tour-text);
+}
+
+.acumenTipBody{
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--tour-muted);
+}
+
+.acumenTipActions{
+  margin-top: 10px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.acumenTipBtn{
+  padding: 8px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--tour-btn-border);
+  background: var(--tour-primary-bg);
+  color: var(--tour-primary-text);
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.acumenTipBtn:hover{
+  filter: brightness(1.06);
+}
+
+
+/* Drive: PDF badge for premium guidance */
+.driveX-name{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.driveX-badge{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 1;
+  border: 1px solid rgba(255,255,255,.16);
+  background: rgba(255,255,255,.06);
+  color: inherit;
+  opacity: .92;
+}
+body.light-mode .driveX-badge, body.sepia-mode .driveX-badge{
+  border-color: rgba(0,0,0,.10);
+  background: rgba(0,0,0,.04);
+}
+.driveX-badge .dot{
+  width: 6px; height: 6px; border-radius: 999px;
+  background: var(--accent);
+  display:inline-block;
+}
