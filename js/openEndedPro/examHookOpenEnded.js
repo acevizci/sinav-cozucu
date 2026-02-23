@@ -1,7 +1,7 @@
 // js/openEndedPro/examHookOpenEnded.js
 // Minimal-invaziv entegrasyon: MutationObserver ile open-ended kartlarını dönüştür.
 
-import { injectOpenEndedCard, evaluateAllOpenEnded } from "./openEndedProUI.js";
+import { injectOpenEndedCard, evaluateAllOpenEnded, stopOpenEndedQueue } from "./openEndedProUI.js";
 
 function $all(sel, root=document){ return Array.from(root.querySelectorAll(sel)); }
 
@@ -102,6 +102,7 @@ export function initOpenEndedPro(ctx){
   try{
     window.__ACUMEN_OPEN_ENDED = window.__ACUMEN_OPEN_ENDED || {};
     window.__ACUMEN_OPEN_ENDED.evaluateAll = () => evaluateAllOpenEnded(ctx);
+    window.__ACUMEN_OPEN_ENDED.stop = () => stopOpenEndedQueue();
 
     // Total open-ended items (best-effort)
     const qs = ctx?.state?.parsed?.questions || [];

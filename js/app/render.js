@@ -206,24 +206,43 @@ export function updateAiSolveUI(){
     const hint = el("aiSolveHint");
     const counter = el("aiSolveCounter");
 
+    // Toggleable batch button: start queue / stop queue
+    const setBtnState = (running, done = 0, total2 = 0) => {
+      if (!btn) return;
+      if (running) {
+        btn.textContent = `⏳ Çalışıyor… (${done}/${total2})`;
+        btn.classList.add("is-running");
+        if (readyChip) readyChip.textContent = "Çalışıyor";
+      } else {
+        btn.textContent = "✨ Tümünü değerlendir (AI)";
+        btn.classList.remove("is-running");
+        if (readyChip) readyChip.textContent = "Hazır";
+      }
+    };
+
     if (btn) {
-      btn.textContent = "✨ Tümünü değerlendir (AI)";
+      setBtnState(false, 0, 0);
       btn.onclick = async () => {
         try {
-          btn.disabled = true;
-          if (readyChip) readyChip.textContent = "Çalışıyor";
-
           const api = window.__ACUMEN_OPEN_ENDED;
-          if (!api || typeof api.evaluateAll !== "function") return;
+          if (!api) return;
 
+          // If already running, clicking acts as STOP.
+          if (api._running && typeof api.stop === "function") {
+            api.stop();
+            setBtnState(false, 0, 0);
+            return;
+          }
+
+          if (typeof api.evaluateAll !== "function") return;
+          setBtnState(true, 0, (api.total || 0));
           await api.evaluateAll();
-
-          if (readyChip) readyChip.textContent = "Hazır";
+          // Final state will also be pushed by onProgress.
+          setBtnState(false, 0, 0);
         } catch (e) {
           console.error(e);
           if (readyChip) readyChip.textContent = "Hata";
-        } finally {
-          btn.disabled = false;
+          if (btn) btn.classList.remove("is-running");
         }
       };
     }
@@ -240,15 +259,16 @@ export function updateAiSolveUI(){
     if (counter) counter.textContent = `0/${total || 0}`;
 
     // allow openEnded UI to push progress updates (0/5, 1/5, ...)
-    // don't clobber an existing handler if another module already set it
     try {
       window.__ACUMEN_OPEN_ENDED = window.__ACUMEN_OPEN_ENDED || {};
-      if (typeof window.__ACUMEN_OPEN_ENDED.onProgress !== "function") {
-        window.__ACUMEN_OPEN_ENDED.onProgress = (done, total2) => {
-          const c = el("aiSolveCounter");
-          if (c) c.textContent = `${done}/${total2}`;
-        };
-      }
+      // Always (re)attach progress handler for this UI.
+      window.__ACUMEN_OPEN_ENDED.onProgress = (done, total2) => {
+        const c = el("aiSolveCounter");
+        if (c) c.textContent = `${done}/${total2}`;
+        const api = window.__ACUMEN_OPEN_ENDED;
+        if (api) api._running = !!(total2 > 0 && done < total2);
+        setBtnState(!!(total2 > 0 && done < total2), done, total2);
+      };
     } catch (_) {}
 
     return; // do not run MCQ logic

@@ -2171,7 +2171,15 @@ body.sepia-mode #parseStatus.finished{ color:#7c3aed !important; }
   font-size: var(--fs-12);
   font-weight: bold;
   cursor: pointer;
-}.ai-hint{
+}
+
+/* Open-ended PRO: batch grading running state */
+.btn-ai-magic.is-running{
+  background: linear-gradient(90deg, #a855f7 0%, #3b82f6 100%);
+  box-shadow: 0 8px 24px rgba(168,85,247,.22);
+}
+
+.ai-hint{
   font-size: var(--fs-10);
   color: #888;
   text-align: center;
