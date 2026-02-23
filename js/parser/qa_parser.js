@@ -79,26 +79,27 @@ function separateStemAndOptions(lines, qNumber, knownAnswer) {
 // Stabilite: sadece tek/iki satırda olup en az 2 adet şık etiketi barındırıyorsa devreye girer.
 if (cleanLines.length <= 2) {
     const one = cleanLines.join(" ").trim();
-    const hits = (one.match(/\b[A-F]\)\s+/g) || []).length;
+    // Allow "A )" variants coming from DOCX runs
+    const hits = (one.match(/\b[A-F]\s*\)\s+/g) || []).length;
     if (hits >= 2) {
-        const firstIdx = one.search(/\b[A-F]\)\s+/);
+        const firstIdx = one.search(/\b[A-F]\s*\)\s+/);
         const stem = firstIdx > 0 ? one.slice(0, firstIdx).trim() : "";
         const tail = firstIdx > 0 ? one.slice(firstIdx).trim() : one;
 
         // parçala: "A) xxx B) yyy ..." -> {A:xxx, B:yyy,...}
-        const parts = tail.split(/\b(?=[A-F]\)\s+)/).map(s => s.trim()).filter(Boolean);
+        const parts = tail.split(/\b(?=[A-F]\s*\)\s+)/).map(s => s.trim()).filter(Boolean);
         const optMap = {};
         for (const p of parts) {
-            const mm = p.match(/^([A-F])\)\s*(.*)$/);
+            const mm = p.match(/^([A-F])\s*\)\s*(.*)$/);
             if (!mm) continue;
             const L = mm[1].toUpperCase();
             let txt = (mm[2] || "").trim();
 
 // A) B) İnsanlar... gibi çift etiketleri temizle
-txt = txt.replace(/^([A-F]\)\s*)+/i, "").trim();
+txt = txt.replace(/^([A-F]\s*\)\s*)+/i, "").trim();
 
 // Bazı dosyalarda ikinci etiket boşluksuz geliyor: B)A)...
-txt = txt.replace(/^[A-F]\)/i, "").trim();
+txt = txt.replace(/^[A-F]\s*\)/i, "").trim();
 
 if (txt) optMap[L] = txt;
 

@@ -109,12 +109,89 @@ export function detectOpenEnded(rawText){
   const t = String(rawText || "");
   if (!t.trim()) return false;
 
-  // Has numbered subs and does NOT look like MCQ options
-  const hasSubs = /(^|\n)\s*\(?\d{1,2}\)?\s*[\).\-:]\s+\S+/m.test(t);
-  const hasOlayOrSorular = /(^|\n)\s*OLAY\b/m.test(t) || /(^|\n)\s*SORULAR?\b/m.test(t);
-  const looksLikeMCQ = /(^|\n)\s*[A-F][\).:-]\s+\S+/m.test(t) || /(^|\n)\s*[A-F]\)\s+\S+/m.test(t);
+  // NOTE:
+  // Earlier versions treated ANY numbered lines as "subquestions".
+  // But MCQ exams also have numbered questions (1., 2., ...), especially in DOCX.
+  // So we require stronger evidence:
+  //  - Either explicit markers (OLAY / SORULAR)
+  //  - Or a long scenario-like prefix before the first numbered subquestion
+  // And we must aggressively rule out MCQ by detecting option labels ANYWHERE
+  // (including inline: "... A) ... B) ...").
 
-  return (hasSubs && !looksLikeMCQ) && (hasOlayOrSorular || t.length > 800);
+  const hasNumberedItems = /(^|\n)\s*\(?\d{1,3}\)?\s*[\).\-:]\s+\S+/m.test(t);
+  if (!hasNumberedItems) return false;
+
+  // --- Helpers
+  const stripParenVars = (s) => String(s || "").replace(/\(\s*[A-ZÇĞİÖŞÜ]\s*\)/g, "");
+
+  // Treat lines like "F) SORULAR" as headers, never as MCQ options.
+  const isSorularHeaderLine = (line) => /\bSORULAR\b/i.test(line) && /^\s*[A-Z]\s*[\).:-]\s*\bSORULAR\b/i.test(line);
+
+  const detectStrongMCQ = (s) => {
+    const text = stripParenVars(s);
+    const lines = text.split(/\r?\n/);
+    const hits = [];
+
+    // Line-start options: A) ... / B. ... / C- ...
+    for (let i = 0; i < lines.length; i++){
+      const ln = lines[i];
+      if (!ln || !ln.trim()) continue;
+      if (isSorularHeaderLine(ln)) continue;
+      const m = ln.match(/^\s*([A-H])\s*[\).\-:]\s+\S+/i);
+      if (m) hits.push({ letter: m[1].toUpperCase(), idx: i });
+    }
+
+    // Inline options on the same line: "... A) ... B) ... C) ..."
+    // Important: ignore "(A)" variable-like references by stripping them above.
+    const inline = [];
+    const inlineRe = /(?:^|\s)([A-H])\s*\)\s+\S+/gi;
+    let m;
+    while ((m = inlineRe.exec(text))){
+      inline.push(m[1].toUpperCase());
+      if (inline.length > 20) break; // safety
+    }
+
+    const uniq = (arr) => Array.from(new Set(arr));
+
+    // Strong MCQ if we see >=4 distinct option letters in line-start OR inline.
+    const distinctLine = uniq(hits.map(h => h.letter));
+    const distinctInline = uniq(inline);
+    if (distinctLine.length >= 4) return true;
+    if (distinctInline.length >= 4) return true;
+    return false;
+  };
+
+  const hasOlay = /(^|\n)\s*OLAY\b/m.test(t);
+  const hasSorular = /(^|\n)\s*SORULAR?\b/m.test(t);
+  const hasOlayOrSorular = hasOlay || hasSorular;
+
+  // --- Open-ended priority path:
+  // If there is an explicit SORULAR header and numbered subquestions after it,
+  // it is open-ended even if the scenario contains "A)" lists or (A) variables.
+  if (hasSorular){
+    const lines = t.split(/\r?\n/);
+    const sorIdx = lines.findIndex(ln => /\bSORULAR\b/i.test(ln));
+    if (sorIdx >= 0){
+      const after = lines.slice(sorIdx + 1).join("\n");
+      const subCount = (after.match(/(^|\n)\s*\(?\d{1,3}\)?\s*[\).\-:]\s+\S+/gm) || []).length;
+      if (subCount >= 1){
+        // If the section AFTER SORULAR clearly looks like MCQ (real A-D options),
+        // then it's not open-ended.
+        if (!detectStrongMCQ(after)) return true;
+      }
+    }
+  }
+
+  // --- Non-marker path:
+  // Rule out MCQ only when MCQ evidence is strong.
+  if (detectStrongMCQ(t)) return false;
+
+  // Heuristic: long scenario prefix before the first numbered item
+  const firstIdx = t.search(/(^|\n)\s*\(?\d{1,3}\)?\s*[\).\-:]\s+\S+/m);
+  const prefix = firstIdx > 0 ? t.slice(0, firstIdx).trim() : "";
+  const hasLongPrefix = prefix.length > 500;
+
+  return hasOlayOrSorular || hasLongPrefix;
 }
 
 /**

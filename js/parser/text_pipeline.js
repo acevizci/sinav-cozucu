@@ -43,6 +43,45 @@ export function splitLines(text) {
     .map(cleanLine);
 }
 
+
+function normalizeInlineOptionLabels(s) {
+  // Ensure there is a space after option labels anywhere: "A)Metin" -> "A) Metin"
+  // Also normalize "A." / "A:" / "A-" to "A)" when it looks like an option label.
+  return (s || "")
+    .replace(/\b([A-F])\s*[\.\:\-]\s*(?=\S)/g, "$1) ")
+    .replace(/\b([A-F])\)\s*(?=\S)/g, "$1) ");
+}
+
+function explodeInlineOptions(line) {
+  // Turn: "... ? A) ... B) ... C) ..." into multiple lines.
+  const l0 = cleanLine(normalizeInlineOptionLabels(line));
+  if (!l0) return [];
+  // Count option labels on same line
+  // Allow "A )" variants coming from DOCX runs (space between letter and ')')
+  const hits = (l0.match(/\b[A-F]\s*\)\s+/g) || []).length;
+  if (hits < 2) return [l0];
+
+  const firstIdx = l0.search(/\b[A-F]\s*\)\s+/);
+  if (firstIdx <= 0) return [l0];
+
+  const before = cleanLine(l0.slice(0, firstIdx));
+  const tail = cleanLine(l0.slice(firstIdx));
+
+  // Split tail into "A) ...", "B) ...", ...
+  const parts = tail
+    .split(/\b(?=[A-F]\s*\)\s+)/)
+    .map((s) => cleanLine(s))
+    .filter(Boolean);
+
+  // Only accept if we really got multiple parts
+  if (parts.length < 2) return [l0];
+
+  const out = [];
+  if (before) out.push(before);
+  for (const p of parts) out.push(p);
+  return out;
+}
+
 function normalizeInlineSolutionToNewLine(line) {
   // if "... Çözüm: B ..." in same line, split into two lines
   const l = cleanLine(line);
@@ -96,6 +135,9 @@ export function normalizeTextToLines(rawText) {
   s = s.replace(RX.docHyphenation, "$1$2");
   s = s.replace(/[ \t]+/g, " ");
 
+  // Normalize option labels globally (inline / no-space variants)
+  s = normalizeInlineOptionLabels(s);
+
   // "A)Metin" => "A) Metin"  (🔥 A-F)
   s = s.replace(/(^|\n)\s*([A-F])\)\s*(\S)/g, "$1$2) $3");
 
@@ -104,11 +146,14 @@ export function normalizeTextToLines(rawText) {
 
   const base = splitLines(s).filter(Boolean);
 
-  // split inline solution markers
+  // explode inline options first (DOCX often puts A) B) C) on same line)
   const exploded = [];
   for (const ln of base) {
-    const parts = normalizeInlineSolutionToNewLine(ln);
-    for (const p of parts) if (p) exploded.push(p);
+    const optParts = explodeInlineOptions(ln);
+    for (const op of optParts) {
+      const solParts = normalizeInlineSolutionToNewLine(op);
+      for (const sp of solParts) if (sp) exploded.push(sp);
+    }
   }
 
   // merge broken A\ntext, bullet\ntext patterns
