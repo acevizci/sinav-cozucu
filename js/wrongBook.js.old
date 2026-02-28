@@ -351,28 +351,16 @@ export function buildWrongOnlyParsed({ limit=60, onlyDue=false, fallbackAll=true
 
   items = items.slice(0, limit);
 
-  const questions = items.map((it, idx) => {
-    const isOE = it.q?.kind === "openEndedPro"
-      || String(it.yourId || "").startsWith("OPEN_ENDED")
-      || it.status === "OPEN_ENDED_RETRY"
-      || it.status === "OPEN_ENDED";
-
-    return {
-      n: idx + 1,
-      origN: (it.q?.origN ?? it.q?.n ?? idx + 1),
-      text: it.q?.text || "",
-      subject: normSubject(it.q?.subject),
-      optionsByLetter: it.q?.optionsByLetter || {},
-      _wrongCount: it.wrongCount || 0,
-      _hash: it._realKey,
-      _isRetryItem: true,
-      // Açık uçlu alanlar (varsa aktar)
-      ...(isOE ? {
-        kind: "openEndedPro",
-        openEnded: it.q?.openEnded || null,
-      } : {}),
-    };
-  });
+  const questions = items.map((it, idx) => ({
+    n: idx + 1,
+    origN: (it.q?.origN ?? it.q?.n ?? idx + 1),
+    text: it.q?.text || "",
+    subject: normSubject(it.q?.subject),
+    optionsByLetter: it.q?.optionsByLetter || {},
+    _wrongCount: it.wrongCount || 0,
+    _hash: it._realKey,
+    _isRetryItem: true
+  }));
 
   const answerKey = {};
   for (let i=0;i<items.length;i++){

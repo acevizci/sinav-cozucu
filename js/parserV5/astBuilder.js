@@ -1,0 +1,177 @@
+// js/parserV5/astBuilder.js
+// AST builder with:
+// - explanation capture (SOLUTION tokens)
+// - _answerFromSolution extraction (single OR multi-select letters)
+// - inferred options when DOCX list markers are lost (4-6 trailing lines after last '?')
+// Adds: _optionsInferred boolean + _optionDetectReason string (for confidence engine)
+
+function extractQn(qnumRaw) {
+  const m = String(qnumRaw || "").match(/^(\d{1,3})/);
+  return m ? Number(m[1]) : null;
+}
+
+function parseOptionRaw(raw) {
+  const t0 = String(raw || "").trim();
+  // DOCX / PDF conversions often add list bullets like "•" before the real option marker.
+  const t = t0.replace(/^[\u2022•\u00B7·\-*–—]+\s*/g, "").trim();
+  const m = t.match(/^([A-H])\s*[\).:\-]\s*(.*)$/i);
+  if (m) return { id: m[1].toUpperCase(), text: String(m[2] || "").trim() };
+  return { id: "", text: t };
+}
+
+
+function parseNumItemRaw(raw) {
+  const t0 = String(raw || "").trim();
+  const t = t0.replace(/^[\u2022•\u00B7·\-*–—]+\s*/g, "").trim();
+  const m = t.match(/^\(?([0-9]{1,2})\)?\s*[\).:\-]\s*(.*)$/);
+  if (m) return { id: String(m[1]), text: String(m[2] || "").trim() };
+  return { id: "", text: t };
+}
+
+
+function uniqKeepOrder(arr) {
+  const seen = new Set();
+  const out = [];
+  for (const x of (arr || [])) {
+    const k = String(x || "").toUpperCase();
+    if (!k || seen.has(k)) continue;
+    seen.add(k);
+    out.push(k);
+  }
+  return out;
+}
+
+function extractAnswerFromSolution(line) {
+  const s = String(line || "");
+  const head = s.match(/(?:çözüm|cozum|cevap|yanıt|yanit|answer)\s*:?\s*(.*)$/i);
+  const tail = head ? head[1] : null;
+  const scope = tail != null ? tail : s;
+
+  const letters = (scope.match(/\b[A-H]\b/gi) || []).map(x => x.toUpperCase());
+  if (!head && letters.length > 0) return null;
+  return letters.length ? uniqKeepOrder(letters) : null;
+}
+
+function inferOptionsFromStemLines(stemLines) {
+  const lines = (stemLines || []).map(s => String(s || "").trim()).filter(Boolean);
+  if (!lines.length) return null;
+
+  let lastQIdx = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].includes("?")) lastQIdx = i;
+  }
+  if (lastQIdx < 0) return null;
+
+  const candidates = lines.slice(lastQIdx + 1).filter(Boolean);
+  if (candidates.length < 4 || candidates.length > 6) return null;
+
+  const badHeader = /^(çözüm|cozum|cevap|yanıt|yanit|açıklama|aciklama|feedback|geri\s*bildirim)\b/i;
+  // If the trailing lines look like sub-questions (a) / 1) / i.) they are NOT MCQ options.
+  const looksLikeSubQuestion = /^\s*(?:[a-zçğıöşü]\)|[0-9]{1,2}\)|[ivxlcdm]+\.)\s+/i;
+  for (const c of candidates) {
+    if (badHeader.test(c)) return null;
+    if (looksLikeSubQuestion.test(c)) return null;
+    // If any candidate is itself a question, it's almost certainly not an option list.
+    if (/\?\s*$/.test(c)) return null;
+    if (c.length < 3 || c.length > 240) return null;
+  }
+
+  const letters = ["A","B","C","D","E","F"];
+  const opts = candidates.map((text, i) => ({ id: letters[i], text }));
+  const newStemLines = lines.slice(0, lastQIdx + 1);
+  return { options: opts, stemLines: newStemLines, reason: "inferred-options:docx-listmarker-loss" };
+}
+
+export function buildAST(blocks) {
+  const nodes = [];
+
+  for (const block of (blocks || [])) {
+    if (!block || block.type !== "QuestionBlock") continue;
+
+    let qn = null;
+    const stemParts = [];
+    const options = [];
+    const parts = [];
+    const explanationParts = [];
+    let answerFromSolution = null;
+
+    for (const tok of block.tokens || []) {
+      if (!tok) continue;
+
+      if (tok.type === "QNUM" && qn == null) {
+        qn = extractQn(tok.raw);
+        const rem = String(tok.raw || "").replace(/^\s*\d{1,3}\s*[).]\s*/, "").trim();
+        if (rem) stemParts.push(rem);
+        continue;
+      }
+
+      if (tok.type === "SOLUTION") {
+        const line = String(tok.raw || "").trim();
+        if (line) {
+          explanationParts.push(line);
+          if (!answerFromSolution) {
+            const ans = extractAnswerFromSolution(line);
+            if (ans) answerFromSolution = ans;
+          }
+        }
+        continue;
+      }
+
+      if (tok.type === "OPTION") {
+        const opt = parseOptionRaw(tok.raw);
+        if (opt.text) options.push(opt);
+        continue;
+      }
+
+      if (tok.type === "NUM_ITEM") {
+        const p = parseNumItemRaw(tok.raw);
+        if (p.text) parts.push(p);
+        continue;
+      }
+
+      if (tok.type === "PARA") {
+        const s = String(tok.raw || "").trim();
+        if (s) stemParts.push(s);
+      }
+    }
+
+    let finalStemParts = stemParts.slice();
+    let finalOptions = options.slice();
+    let optionsInferred = false;
+    let optionDetectReason = finalOptions.length ? "explicit-options" : "no-options";
+
+    // Only infer MCQ options if we DON'T already have numbered/lettered sub-parts.
+    // Open-ended questions often have 2-6 sub-questions -> must NOT become MCQ.
+    const hasParts = (parts && parts.length > 0);
+
+    if (finalOptions.length < 4 && !hasParts) {
+      const inferred = inferOptionsFromStemLines(finalStemParts);
+      if (inferred && inferred.options?.length >= 4) {
+        finalOptions = inferred.options;
+        finalStemParts = inferred.stemLines;
+        optionsInferred = true;
+        optionDetectReason = inferred.reason || "inferred-options";
+      }
+    } else if (finalOptions.length >= 4) {
+      optionDetectReason = "explicit-options";
+    }
+
+    const stem = finalStemParts.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+    const explanation = explanationParts.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+
+    nodes.push({
+      type: "question",
+      qn: qn || (nodes.length + 1),
+      stem,
+      options: finalOptions,
+      parts,
+      explanation: explanation || null,
+      _answerFromSolution: answerFromSolution,
+      _optionsInferred: optionsInferred,
+      _optionDetectReason: optionDetectReason,
+      rawTokens: block.tokens || []
+    });
+  }
+
+  return { nodes };
+}

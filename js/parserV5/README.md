@@ -1,0 +1,1 @@
+# ParserV5 (Structure-driven)\n\nThis folder contains the lesson-agnostic tokenizer/AST + strategy plugins used by js/parser.js in V5.\n

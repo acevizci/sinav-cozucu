@@ -34,6 +34,7 @@ import { createFocusHelpers } from "./app/focus.js";
 import { addSession, updateSession, listSessions, getSession, deleteSession } from "./app/sessionStore.js";
 
 import { initNotesTab } from "./aiPractice/practiceUI.js";
+import { initPerformanceCenter } from "./performance/performanceUI.js";
 
 
 // js/app.js - İmza (only when debug is enabled)
@@ -582,7 +583,14 @@ restore();
 setStatus({ id:"STATUS_READY" }); 
 
 // First-run onboarding tour
-try { initOnboarding(); } catch (e) {}
+// Onboarding sadece login sonrası başlasın
+try {
+  window.addEventListener("acumen:auth", (ev) => {
+    if (ev?.detail?.state === "in") {
+      try { initOnboarding(); } catch {}
+    }
+  });
+} catch (e) {}
     
 
 (function handleReportReplay(){
@@ -688,3 +696,7 @@ if (brandLogo) {
     };
 }
 
+
+
+// ✅ v15: Performance Center (Exam History + AI Coach)
+try { initPerformanceCenter(); } catch (e) { console.warn(e); }

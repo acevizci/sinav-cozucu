@@ -525,15 +525,8 @@ export function injectOpenEndedCard({ ctx, card, q }){
     }
   }catch(_){}
 
-  let parsed = parseOpenEnded(q);
-
-  // Eğer parts boşsa ama soru açık uçlu işaretliyse (Tekrar modundan gelen eski kayıtlar),
-  // q.text'i tek bir part olarak kullan
-  if (!parsed || !Array.isArray(parsed.parts) || parsed.parts.length === 0) {
-    const fallbackText = String(q.text || q.stem || "").trim();
-    if (!fallbackText) return false;
-    parsed = { scenario: "", parts: [{ id: String(q.n || "1"), text: fallbackText }] };
-  }
+  const parsed = parseOpenEnded(q);
+  if (!parsed || !Array.isArray(parsed.parts) || parsed.parts.length === 0) return false;
 
   card.dataset.oeInjected = "1";
   card.classList.add("oe-card");
@@ -947,88 +940,4 @@ export async function evaluateAllOpenEnded(ctx){
     console.error('[OpenEndedPro] evaluateAll failed', e);
   }
 }
-
-// ================================
-// OpenEndedPro: SAFE AUTO-INJECTOR
-// - mevcut render akışına zarar vermez
-// - kartlar DOM'a sonradan gelse bile (SRS/Tekrar) inject eder
-// ================================
-
-export function scanAndInjectOpenEnded(ctx = {}, root = null) {
-  try {
-    if (!ctx?.state?.parsed?.questions?.length) return;
-
-    const r = root || document;
-    const cards = Array.from(
-      r.querySelectorAll('.q[data-q], .q-card[data-q], .question-card[data-q], [data-q][class*="q"]')
-    );
-
-    if (!cards.length) return;
-
-    const byN = new Map();
-    for (const q of (ctx.state.parsed.questions || [])) {
-      const n = Number(q?.n);
-      if (Number.isFinite(n) && n > 0) byN.set(n, q);
-    }
-
-    for (const card of cards) {
-      const qn = Number(card?.dataset?.q || card?.getAttribute?.("data-q"));
-      if (!Number.isFinite(qn) || qn <= 0) continue;
-
-      const q = byN.get(qn);
-      if (!q) continue;
-
-      // injectOpenEndedCard kendi içinde detectOpenEndedQuestion ile filtreliyor
-      injectOpenEndedCard({ ctx, card, q });
-    }
-  } catch (e) {
-    // sessiz geç (UI bozulmasın)
-  }
-}
-
-export function installOpenEndedAutoInjector(ctx = {}, opts = {}) {
-  try {
-    if (typeof window === "undefined" || typeof document === "undefined") return;
-
-    // tek sefer kur
-    if (window.__OEPRO_AUTO_INJECTOR_ON) return;
-    window.__OEPRO_AUTO_INJECTOR_ON = true;
-
-    const root =
-      opts.root ||
-      (typeof opts.rootId === "string" ? document.getElementById(opts.rootId) : null) ||
-      document.getElementById("examArea") ||
-      document.body;
-
-    if (!root) return;
-
-    // ilk tarama
-    setTimeout(() => scanAndInjectOpenEnded(ctx, root), 0);
-    setTimeout(() => scanAndInjectOpenEnded(ctx, root), 250);
-
-    // DOM değişince tekrar tara (debounce)
-    let t = null;
-    const ping = () => {
-      clearTimeout(t);
-      t = setTimeout(() => scanAndInjectOpenEnded(ctx, root), 50);
-    };
-
-    const obs = new MutationObserver(() => ping());
-    obs.observe(root, { childList: true, subtree: true });
-
-    // global referans (istersen başka yerden tetikle)
-    window.__OEPRO_OBS = obs;
-  } catch (e) {
-    // sessiz geç
-  }
-}
-
-// (Opsiyonel) global kısa yollar:
-// - herhangi bir yerden window.scanAndInjectOpenEnded(...) diye çağırabil
-try {
-  if (typeof window !== "undefined") {
-    window.scanAndInjectOpenEnded = scanAndInjectOpenEnded;
-    window.installOpenEndedAutoInjector = installOpenEndedAutoInjector;
-  }
-} catch {}
 

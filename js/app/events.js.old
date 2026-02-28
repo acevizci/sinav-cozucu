@@ -194,16 +194,6 @@ safeBind("btnWrongMode", () => {
   const base = buildWrongOnlyParsed({ limit: 80, onlyDue: true, fallbackAll: true });
   if (!base) return showWarn({id:"WRONG_BOOK_EMPTY"});
   state.parsed = applyShuffle(base, { shuffleQ:true, shuffleO:true });
-
-  // Açık uçlu sorular varsa meta flag'i set et (examHookOpenEnded için)
-  try {
-    const hasOE = (state.parsed.questions || []).some(q => q?.kind === "openEndedPro");
-    if (hasOE) {
-      state.parsed.meta = state.parsed.meta || {};
-      state.parsed.meta.openEndedPro = true;
-    }
-  } catch(_) {}
-
   state.mode="prep";
   state.answers.clear();
   paintAll();
@@ -1722,10 +1712,3 @@ document.addEventListener('click', function(event) {
   }
 });
 }
-
-// ================= OPEN-ENDED PRO: AUTO-INJECT (SAFE) =================
-try {
-  if (typeof window.installOpenEndedAutoInjector === "function") {
-    window.installOpenEndedAutoInjector({ state }, { rootId: "examArea" });
-  }
-} catch {}

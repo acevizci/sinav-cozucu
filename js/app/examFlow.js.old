@@ -632,15 +632,6 @@ try { patchMissingOptionsFromRawText(state.parsed, text); } catch (e) { /* no-op
   function startExam({ resume = false } = {}) {
     if (!state.parsed) return;
 
-    // Açık uçlu sorular varsa meta flag'i garanti et (Tekrar modundan geliyorsa)
-    try {
-      const hasOE = (state.parsed.questions || []).some(q => q?.kind === "openEndedPro");
-      if (hasOE) {
-        state.parsed.meta = state.parsed.meta || {};
-        state.parsed.meta.openEndedPro = true;
-      }
-    } catch(_) {}
-
     state.mode = "exam";
     state.lastActionAt = Date.now();
 

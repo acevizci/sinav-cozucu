@@ -332,9 +332,13 @@ export function renderExam(state){
                       q.dogruCevap || 
                       q._answerFromSolution;
 
-    const keyLetters = _lettersFromAny(correctId);
-    const selectCount = Math.max((q.selectCount || 1), (keyLetters.length || 1));
-    const isMulti = selectCount > 1;
+    // PRODUCTION SAFE: Only trust parser's selectCount.
+// Do NOT auto-upgrade to multi based on solution letters.
+const selectCount = q.selectCount || 1;
+const isMulti = selectCount > 1;
+
+// Still compute key letters for scoring only.
+const keyLetters = _lettersFromAny(correctId);
 
     const correctLetter = (!isMulti && correctId) ? getCorrectDisplayLetter(q, correctId) : null;
     const hasKey = !!correctId;
@@ -618,8 +622,8 @@ export function renderExam(state){
       if (!cId) continue;
 
       const ch = answers.get(qq.n);
-      const keyLetters = _lettersFromAny(cId);
-      const scCount = Math.max((qq.selectCount || 1), (keyLetters.length || 1));
+      const scCount = qq.selectCount || 1;
+const keyLetters = _lettersFromAny(cId);
       
       const s = _questionScore(qq, ch, cId, { selectCount: scCount, mode: "result" });
       if (s === null) continue;

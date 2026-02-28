@@ -20,10 +20,31 @@ export function normalizeText(t){
 }
 
 export function formatTime(sec){
+  // Backward-compatible short formatter.
+  // < 1h => m:ss, >=1h => h:mm:ss
   sec = Math.max(0, sec|0);
-  const m = Math.floor(sec/60);
+  const h = Math.floor(sec/3600);
+  const m = Math.floor((sec%3600)/60);
   const s = sec%60;
+  if (h > 0) return `${h}:${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
   return `${m}:${String(s).padStart(2,"0")}`;
+}
+
+export function formatDurationHuman(sec){
+  // Human readable duration for UI: "12 dk 27 sn" / "1 sa 02 dk"
+  sec = Math.max(0, sec|0);
+  const h = Math.floor(sec/3600);
+  const m = Math.floor((sec%3600)/60);
+  const s = sec%60;
+
+  if (h > 0){
+    // keep seconds out for readability when hours exist
+    return `${h} sa ${String(m).padStart(2,"0")} dk`;
+  }
+  if (m > 0){
+    return `${m} dk ${String(s).padStart(2,"0")} sn`;
+  }
+  return `${s} sn`;
 }
 
 export function shuffleArray(arr){
