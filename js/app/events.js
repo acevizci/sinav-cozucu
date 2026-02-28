@@ -79,6 +79,13 @@ export function bindEvents(ctx = {}) {
   const listFolderBooklets = ctx.listFolderBooklets;
   const fetchDriveFileAsFileOrText = ctx.fetchDriveFileAsFileOrText;
 
+  // ================= OPEN-ENDED PRO: AUTO-INJECT (SAFE) =================
+  // Tekrar (SRS) dahil, DOM geç render edilse bile açık uçlu kartları textarea+AI UI'ye çevirir.
+  try {
+    window.installOpenEndedAutoInjector?.({ state }, { rootId: "examArea" });
+  } catch (_) {}
+
+
 /* ================= EVENTS ================= */
 el("btnStart").onclick = startExam;
 el("btnFinish").onclick = finishExam;
@@ -207,6 +214,8 @@ safeBind("btnWrongMode", () => {
   state.mode="prep";
   state.answers.clear();
   paintAll();
+  // open-ended kartlar için ekstra anlık tarama (zararsız)
+  try { setTimeout(() => window.scanAndInjectOpenEnded?.({ state }, document.getElementById("examArea") || document), 0); } catch (_) {}
 });
 
 
@@ -1722,10 +1731,3 @@ document.addEventListener('click', function(event) {
   }
 });
 }
-
-// ================= OPEN-ENDED PRO: AUTO-INJECT (SAFE) =================
-try {
-  if (typeof window.installOpenEndedAutoInjector === "function") {
-    window.installOpenEndedAutoInjector({ state }, { rootId: "examArea" });
-  }
-} catch {}

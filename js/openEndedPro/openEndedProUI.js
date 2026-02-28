@@ -504,7 +504,13 @@ function hideBaseAnswerArea(card){
 
 export function injectOpenEndedCard({ ctx, card, q }){
   if (!ctx?.state || !card || !q) return false;
-  if (!detectOpenEndedQuestion(q)) return false;
+  const __hasOptions =
+    (q?.optionsByLetter && Object.keys(q.optionsByLetter || {}).length > 0) ||
+    (Array.isArray(q?.options) && q.options.length > 0) ||
+    (Array.isArray(q?.choices) && q.choices.length > 0);
+  // Tekrar (SRS) gibi bazı akışlarda eski kayıtlar kind bilgisini kaybedebilir.
+  // Şık yoksa açık uçlu kabul edip UI'yi inject edelim.
+  if (!detectOpenEndedQuestion(q) && __hasOptions) return false;
   if (card.dataset.oeInjected === "1") return true;
   
   try{
@@ -953,7 +959,6 @@ export async function evaluateAllOpenEnded(ctx){
 // - mevcut render akışına zarar vermez
 // - kartlar DOM'a sonradan gelse bile (SRS/Tekrar) inject eder
 // ================================
-
 export function scanAndInjectOpenEnded(ctx = {}, root = null) {
   try {
     if (!ctx?.state?.parsed?.questions?.length) return;
@@ -978,12 +983,9 @@ export function scanAndInjectOpenEnded(ctx = {}, root = null) {
       const q = byN.get(qn);
       if (!q) continue;
 
-      // injectOpenEndedCard kendi içinde detectOpenEndedQuestion ile filtreliyor
       injectOpenEndedCard({ ctx, card, q });
     }
-  } catch (e) {
-    // sessiz geç (UI bozulmasın)
-  }
+  } catch (_) { /* no-op */ }
 }
 
 export function installOpenEndedAutoInjector(ctx = {}, opts = {}) {
@@ -1016,19 +1018,15 @@ export function installOpenEndedAutoInjector(ctx = {}, opts = {}) {
     const obs = new MutationObserver(() => ping());
     obs.observe(root, { childList: true, subtree: true });
 
-    // global referans (istersen başka yerden tetikle)
     window.__OEPRO_OBS = obs;
-  } catch (e) {
-    // sessiz geç
-  }
+  } catch (_) { /* no-op */ }
 }
 
-// (Opsiyonel) global kısa yollar:
-// - herhangi bir yerden window.scanAndInjectOpenEnded(...) diye çağırabil
+// global short-hands (opsiyonel)
 try {
   if (typeof window !== "undefined") {
     window.scanAndInjectOpenEnded = scanAndInjectOpenEnded;
     window.installOpenEndedAutoInjector = installOpenEndedAutoInjector;
   }
-} catch {}
+} catch (_) {}
 

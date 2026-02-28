@@ -352,10 +352,18 @@ export function buildWrongOnlyParsed({ limit=60, onlyDue=false, fallbackAll=true
   items = items.slice(0, limit);
 
   const questions = items.map((it, idx) => {
+    const hasAnyOptions =
+      (it.q?.optionsByLetter && Object.keys(it.q.optionsByLetter || {}).length > 0) ||
+      (Array.isArray(it.q?.options) && it.q.options.length > 0) ||
+      (Array.isArray(it.q?.choices) && it.q.choices.length > 0);
+
     const isOE = it.q?.kind === "openEndedPro"
+      || !!it.q?.openEnded
       || String(it.yourId || "").startsWith("OPEN_ENDED")
       || it.status === "OPEN_ENDED_RETRY"
-      || it.status === "OPEN_ENDED";
+      || it.status === "OPEN_ENDED"
+      // eski kayıtlar: şık yok + doğru seçenek yok → açık uçlu kabul et
+      || (!hasAnyOptions && !it.correctId);
 
     return {
       n: idx + 1,
@@ -382,15 +390,19 @@ export function buildWrongOnlyParsed({ limit=60, onlyDue=false, fallbackAll=true
 
   const keyCount = Object.keys(answerKey).length;
 
+  // Open-ended meta flag (SRS tekrarında UI injector için)
+  const __hasOE = questions.some(q => q?.kind === "openEndedPro");
+
   return {
     title: subject ? `Tekrar • ${normSubject(subject)}` : (onlyDue ? "Tekrar (SRS)" : "Yanlış Defteri"),
     questions,
     answerKey,
     keyCount,
     mapOriginalToDisplay: {},
-    meta: { 
+    meta: {
         isSmartRetry: true,
-        source: "wrong_book" 
+        source: "wrong_book",
+        openEndedPro: __hasOE
     }
   };
 }
