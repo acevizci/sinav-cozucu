@@ -504,14 +504,9 @@ function hideBaseAnswerArea(card){
 
 export function injectOpenEndedCard({ ctx, card, q }){
   if (!ctx?.state || !card || !q) return false;
-  const __hasOptions =
-    (q?.optionsByLetter && Object.keys(q.optionsByLetter || {}).length > 0) ||
-    (Array.isArray(q?.options) && q.options.length > 0) ||
-    (Array.isArray(q?.choices) && q.choices.length > 0);
-  // Tekrar (SRS) gibi bazı akışlarda eski kayıtlar kind bilgisini kaybedebilir.
-  // Şık yoksa açık uçlu kabul edip UI'yi inject edelim.
-  if (!detectOpenEndedQuestion(q) && __hasOptions) return false;
-  if (card.dataset.oeInjected === "1") return true;
+  if (!detectOpenEndedQuestion(q)) return false;
+  // same card: avoid double-mount
+  if (card?.dataset?.oeproInjected === "1" || card?.dataset?.oeInjected === "1") return true;
   
   try{
     const n = Number(q?.n);
@@ -541,6 +536,7 @@ export function injectOpenEndedCard({ ctx, card, q }){
     parsed = { scenario: "", parts: [{ id: String(q.n || "1"), text: fallbackText }] };
   }
 
+  card.dataset.oeproInjected = "1";
   card.dataset.oeInjected = "1";
   card.classList.add("oe-card");
 
@@ -572,10 +568,52 @@ export function injectOpenEndedCard({ ctx, card, q }){
   const host = card.querySelector(".opts") || card.querySelector(".q-body") || card;
   hideBaseAnswerArea(card);
 
+// Inject momentum bar into card top (non-destructive)
+try{
+  const top = card.querySelector(".qMeta") || card.querySelector(".qTop") || card.querySelector(".q-header-row") || card;
+  if (top && (deltaHtml || formdaHtml || sparkHtml)){
+    const box = document.createElement("div");
+    box.className = "oe-momentum";
+    box.style.cssText = "margin-top:10px;";
+    box.innerHTML = `
+      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px;">
+        ${formdaHtml || ""}
+        ${deltaHtml || ""}
+      </div>
+      ${sparkHtml || ""}
+    `;
+    top.appendChild(box);
+  }
+}catch(_){}
+
   const qn = Number(q.n);
   const rec = getOpenEndedAnswer(ctx.state, qn);
 
   ensureStyles();
+
+// SRS + Open-ended dashboard (once)
+_ensureSrsOeDashboard(ctx);
+
+// Open-ended momentum widgets (sparkline + delta + formda)
+const prog = Array.isArray(q.progress) ? q.progress : [];
+const _spark = _oeRenderDualSparkline(prog);
+const sparkHtml = _spark?.html || "";
+const st = _spark?.stats || { deltaPct:0, streakUp:0, isFormda:false, lastPct:null };
+const delta = Number(st.deltaPct || 0);
+const deltaHtml = (Number.isFinite(delta) && delta !== 0)
+  ? `<span class="oe-delta ${delta<0?'oe-delta--down':''}" style="
+      display:inline-flex;align-items:center;gap:6px;
+      padding:6px 10px;border-radius:999px;
+      font-size:11px;font-weight:900;
+      border:1px solid ${delta<0?'rgba(239,68,68,.35)':'rgba(168,85,247,.32)'};
+      background:${delta<0?'rgba(239,68,68,.12)':'rgba(168,85,247,.12)'};
+      color:${delta<0?'#fecaca':'#e9d5ff'};
+    ">🔥 ${delta>0?'+':''}${delta}%</span>`
+  : "";
+
+const formdaHtml = st.isFormda
+  ? `<span class="oe-formda" style="display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;border:1px solid rgba(34,197,94,.35);background:rgba(34,197,94,.12);color:#86efac;font-size:11px;font-weight:900;">🏆 Formda</span>`
+  : "";
 
   const sq = q.openEnded?.subQuestion || { id: String(qn), text: String(q.text || "") };
   const partId = String(sq.id || qn);
@@ -654,16 +692,75 @@ export function injectOpenEndedCard({ ctx, card, q }){
   const timeEl = document.createElement("div");
   timeEl.className = "oeproTime";
 
+  // ===============================
+  // EF tabanlı "Gelişim Rozeti" (SRS)
+  // - sadece SRS (Tekrar) modunda görünür
+  // - state.srsInfo yoksa (bazı akışlarda) lazy hesaplar
+  // ===============================
+  const efChip = document.createElement("div");
+  efChip.className = "oeproChip";
+  efChip.style.display = "none";
+
+  function _oeproEnsureSrsInfo(){
+    try{
+      const parsed0 = ctx?.state?.parsed;
+      const isSrs = /Tekrar \(SRS\)/i.test(parsed0?.title || "") || ctx?.state?.srsReview === true;
+      if (!isSrs) return false;
+      if (ctx.state.srsInfo && typeof ctx.state.srsInfo === "object" && Object.keys(ctx.state.srsInfo).length) return true;
+      const fn = (typeof window !== "undefined") ? window.getSrsInfoForParsed : null;
+      if (typeof fn === "function" && parsed0) {
+        ctx.state.srsInfo = fn(parsed0) || {};
+        return true;
+      }
+    }catch(_){}
+    return false;
+  }
+
+  function _oeproEfTier(ef){
+    const v = Number(ef);
+    if (!Number.isFinite(v)) return null;
+    // EF tiering (playful)
+    // - "Usta" eşiği: 2.70+
+    if (v >= 2.70) return { label: "Usta 🧙‍♂️", cls: "oeproChipGood" };
+    if (v >= 2.30) return { label: "İyi 💪", cls: "oeproChipGood" };
+    if (v >= 2.00) return { label: "Gelişiyor 🌱", cls: "oeproChipWarn" };
+    return { label: "Zorlanıyor 😵‍💫", cls: "oeproChipBad" };
+  }
+
+  function _oeproRefreshEf(){
+    try{
+      const parsed0 = ctx?.state?.parsed;
+      const isSrs = /Tekrar \(SRS\)/i.test(parsed0?.title || "") || ctx?.state?.srsReview === true;
+      if (!isSrs) { efChip.style.display = "none"; return; }
+
+      _oeproEnsureSrsInfo();
+      const info = ctx?.state?.srsInfo?.[qn];
+      const ef = info?.ef;
+      const tier = _oeproEfTier(ef);
+      if (!tier) { efChip.style.display = "none"; return; }
+
+      efChip.className = "oeproChip " + tier.cls;
+      efChip.textContent = `EF ${Number(ef).toFixed(2)} • ${tier.label}`;
+      efChip.style.display = "inline-flex";
+    }catch(_){
+      try{ efChip.style.display = "none"; }catch(__){}
+    }
+  }
+
   const badgeEl = document.createElement("div");
   badgeEl.className = "oeproBadge";
   badgeEl.textContent = "Yeniden değerlendirilmeli";
 
   left.appendChild(hint);
   left.appendChild(timeEl);
+  left.appendChild(efChip);
   left.appendChild(badgeEl);
 
   meta.appendChild(left);
   meta.appendChild(actions);
+
+  // initial EF badge render
+  _oeproRefreshEf();
 
   const resultHost = document.createElement("div");
 
@@ -678,6 +775,7 @@ export function injectOpenEndedCard({ ctx, card, q }){
       const needs = hasText && hasGrade && upd && grd && grd < upd;
       if (needs) badgeEl.classList.add("is-on");
       else badgeEl.classList.remove("is-on");
+      _oeproRefreshEf();
     }catch(_){ }
   }
 
@@ -824,6 +922,141 @@ export function injectOpenEndedCard({ ctx, card, q }){
   return true;
 }
 
+// ---------- Open-ended momentum helpers (Quality + EF sparkline) ----------
+function _oeSparkY(p){
+  try{
+    if (!p || typeof p !== "object") return null;
+    if (typeof p.score === "number" && Number.isFinite(p.score)) return Math.max(0, Math.min(1, p.score));
+    if (typeof p.quality === "number" && Number.isFinite(p.quality)) return Math.max(0, Math.min(1, p.quality / 5));
+    return null;
+  }catch(_){ return null; }
+}
+
+function _oeNormalizeEf01(ef){
+  if (ef == null || !Number.isFinite(Number(ef))) return null;
+  const v = Number(ef);
+  const lo = 1.3, hi = 3.2;
+  const y = (v - lo) / (hi - lo);
+  return Math.max(0, Math.min(1, y));
+}
+
+function _oeCalcStats(progress = []){
+  const arr = Array.isArray(progress) ? progress : [];
+  const q = arr.map(_oeSparkY).filter(v => typeof v === "number" && Number.isFinite(v));
+  if (q.length < 2){
+    return { deltaPct: 0, streakUp: 0, isFormda: false, lastPct: q.length ? Math.round(q[q.length-1]*100) : null };
+  }
+  const last = q[q.length-1];
+  const prev = q[q.length-2];
+  const deltaPct = Math.round((last - prev) * 100);
+
+  let streakUp = 0;
+  for (let i=q.length-1; i>=1 && streakUp<5; i--){
+    if (q[i] > q[i-1]) streakUp++;
+    else break;
+  }
+  return { deltaPct, streakUp, isFormda: streakUp >= 5, lastPct: Math.round(last*100) };
+}
+
+function _oeRenderDualSparkline(progress = []){
+  try{
+    const arr = Array.isArray(progress) ? progress : [];
+    const pts = arr.map(p => ({
+      ts: Number(p?.ts)||0,
+      qy: _oeSparkY(p),
+      ef01: _oeNormalizeEf01(p?.ef)
+    })).filter(p => p.ts && (p.qy != null || p.ef01 != null));
+
+    const stats = _oeCalcStats(arr);
+    if (pts.length < 2) return { html:"", stats };
+
+    pts.sort((a,b)=>a.ts-b.ts);
+
+    const w=240, h=54, pad=5;
+    const minT=pts[0].ts, maxT=pts[pts.length-1].ts;
+    const dx=(t)=> (maxT===minT) ? pad : pad + ((t-minT)/(maxT-minT))*(w-pad*2);
+    const dy=(y)=> pad + (1-y)*(h-pad*2);
+
+    const qPts = pts.filter(p=>p.qy!=null).map(p=>({ts:p.ts,y:p.qy}));
+    const efPts = pts.filter(p=>p.ef01!=null).map(p=>({ts:p.ts,y:p.ef01}));
+
+    const mk=(pp)=>pp.map((p,i)=>`${i===0?'M':'L'} ${dx(p.ts).toFixed(2)} ${dy(p.y).toFixed(2)}`).join(" ");
+    const qPath = qPts.length>=2 ? mk(qPts) : "";
+    const efPath = efPts.length>=2 ? mk(efPts) : "";
+    const lastQ = qPts.length ? qPts[qPts.length-1] : null;
+
+    const html = `
+      <div class="oe-spark" style="margin-top:10px;padding:10px 12px;border-radius:14px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.10);">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;">
+          <div style="display:flex;flex-direction:column;gap:4px;">
+            <div style="font-size:11px;font-weight:900;letter-spacing:.8px;text-transform:uppercase;color:rgba(255,255,255,.65);">Cevap Kalitesi (Zaman)</div>
+            <div style="display:flex;gap:10px;font-size:11px;color:rgba(255,255,255,.75);">
+              <span style="display:inline-flex;align-items:center;gap:6px;"><span style="width:10px;height:2px;background:rgba(168,85,247,.95);border-radius:2px;display:inline-block;"></span>Kalite</span>
+              <span style="display:inline-flex;align-items:center;gap:6px;"><span style="width:10px;height:2px;background:rgba(59,130,246,.95);border-radius:2px;display:inline-block;"></span>EF</span>
+            </div>
+          </div>
+          <div style="font-size:11px;font-weight:900;color:#fff;white-space:nowrap;">Son: ${stats.lastPct!=null?stats.lastPct+"%":"—"}</div>
+        </div>
+
+        <svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" style="display:block;width:100%;max-width:${w}px;height:auto;">
+          ${qPath ? `<path d="${qPath}" fill="none" stroke="rgba(168,85,247,.95)" stroke-width="2.3" stroke-linecap="round"/>` : ``}
+          ${efPath ? `<path d="${efPath}" fill="none" stroke="rgba(59,130,246,.95)" stroke-width="2.0" stroke-linecap="round" stroke-dasharray="4 3"/>` : ``}
+          ${lastQ ? `<circle cx="${dx(lastQ.ts).toFixed(2)}" cy="${dy(lastQ.y).toFixed(2)}" r="3.2" fill="rgba(255,255,255,.95)"/>` : ``}
+        </svg>
+      </div>
+    `;
+    return { html, stats };
+  }catch(_){
+    return { html:"", stats:{ deltaPct:0, streakUp:0, isFormda:false, lastPct:null } };
+  }
+}
+
+function _ensureSrsOeDashboard(ctx){
+  try{
+    if (!ctx?.state?.parsed?.questions?.length) return;
+    if (document.getElementById("oeDashSrs")) return;
+
+    const qs = ctx.state.parsed.questions.filter(q => q?.kind === "openEndedPro");
+    if (!qs.length) return;
+
+    const lastVals = qs.map(q=>{
+      const prog = Array.isArray(q.progress)?q.progress:[];
+      const vals = prog.map(_oeSparkY).filter(v=>typeof v==="number" && Number.isFinite(v));
+      return vals.length ? vals[vals.length-1] : null;
+    }).filter(v=>v!=null);
+
+    const avg = lastVals.length ? (lastVals.reduce((a,b)=>a+b,0)/lastVals.length) : null;
+
+    const formda = qs.filter(q=>{
+      const prog = Array.isArray(q.progress)?q.progress:[];
+      const vals = prog.map(_oeSparkY).filter(v=>typeof v==="number" && Number.isFinite(v));
+      if (vals.length < 6) return false;
+      for (let i=vals.length-1, c=0; i>=1 && c<5; i--, c++){
+        if (!(vals[i] > vals[i-1])) return false;
+      }
+      return true;
+    }).length;
+
+    const host = document.getElementById("examArea") || document.body;
+    if (!host) return;
+
+    const box = document.createElement("div");
+    box.id = "oeDashSrs";
+    box.style.cssText = "margin:10px 0 14px;padding:12px 14px;border-radius:16px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.10);";
+    box.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+        <div style="font-size:12px;font-weight:900;letter-spacing:.8px;text-transform:uppercase;color:rgba(255,255,255,.65);">Open-ended Dashboard</div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span style="font-size:11px;font-weight:900;color:#fff;">Ortalama: ${avg!=null?Math.round(avg*100)+"%":"—"}</span>
+          <span style="font-size:11px;font-weight:900;color:#86efac;">🏆 Formda: ${formda}</span>
+        </div>
+      </div>
+    `;
+    host.prepend(box);
+  }catch(_){}
+}
+
+
 // Global batch evaluation (used by the top bar button)
 export async function evaluateAllOpenEnded(ctx){
   try{
@@ -963,18 +1196,25 @@ export function scanAndInjectOpenEnded(ctx = {}, root = null) {
   try {
     if (!ctx?.state?.parsed?.questions?.length) return;
 
-    const r = root || document;
-    const cards = Array.from(
-      r.querySelectorAll('.q[data-q], .q-card[data-q], .question-card[data-q], [data-q][class*="q"]')
-    );
+    const doc = (root && root.querySelectorAll) ? root : document;
 
-    if (!cards.length) return;
-
+    // -----------------------------
+    // helper: parsed -> q map
+    // -----------------------------
     const byN = new Map();
     for (const q of (ctx.state.parsed.questions || [])) {
       const n = Number(q?.n);
       if (Number.isFinite(n) && n > 0) byN.set(n, q);
     }
+
+    // -----------------------------
+    // 1) Normal yol: data-q olan kartları tara
+    // -----------------------------
+    const cards = Array.from(
+      doc.querySelectorAll('.q[data-q], .q-card[data-q], .question-card[data-q], [data-q]')
+    );
+
+    let injectedAny = false;
 
     for (const card of cards) {
       const qn = Number(card?.dataset?.q || card?.getAttribute?.("data-q"));
@@ -984,7 +1224,93 @@ export function scanAndInjectOpenEnded(ctx = {}, root = null) {
       if (!q) continue;
 
       injectOpenEndedCard({ ctx, card, q });
+      injectedAny = true;
     }
+
+    if (injectedAny) return;
+
+    // -----------------------------
+    // 2) SRS fallback: data-q yoksa
+    // - Sol haritada seçili soru numarasını yakala
+    // - Ana panelde "Soru/Pratik" pill'lerini barındıran kartı bul
+    // -----------------------------
+
+    // 2a) aktif soru numarası (sol panel)
+    let activeQn = null;
+
+    const navCandidates = Array.from(doc.querySelectorAll('button, [role="button"], a, div'))
+      .filter(el => {
+        const t = (el.textContent || "").trim();
+        return /^\d{1,4}$/.test(t);
+      });
+
+    const activeNav =
+      navCandidates.find(el => /active|selected|current/i.test(el.className || "")) ||
+      navCandidates.find(el => el.getAttribute?.("aria-current") === "true") ||
+      navCandidates.find(el => el.getAttribute?.("aria-selected") === "true") ||
+      null;
+
+    if (activeNav) {
+      const t = (activeNav.textContent || "").trim();
+      const n = Number(t);
+      if (Number.isFinite(n) && n > 0) activeQn = n;
+    }
+
+    if (!activeQn && navCandidates[0]) {
+      const n = Number((navCandidates[0].textContent || "").trim());
+      if (Number.isFinite(n) && n > 0) activeQn = n;
+    }
+
+    if (!activeQn) return;
+
+    const q = byN.get(activeQn);
+    if (!q) return;
+
+    // SRS fallback: sadece gerçek openEndedPro
+    if (q.kind !== "openEndedPro") return;
+
+    // 2b) aktif kartı bul: içinde "Soru" ve "Pratik" pill'leri olan en yakın container
+    const pills = Array.from(doc.querySelectorAll("button, div, span"))
+      .filter(el => {
+        const t = (el.textContent || "").trim().toLowerCase();
+        return t === "soru" || t === "pratik";
+      });
+
+    let card = null;
+
+    const soruEl = pills.find(el => (el.textContent || "").trim().toLowerCase() === "soru");
+    const pratikEl = pills.find(el => (el.textContent || "").trim().toLowerCase() === "pratik");
+
+    const climb = (el, max = 10) => {
+      const out = [];
+      let cur = el;
+      for (let i = 0; i < max && cur; i++) {
+        out.push(cur);
+        cur = cur.parentElement;
+      }
+      return out;
+    };
+
+    if (soruEl && pratikEl) {
+      const a = climb(soruEl);
+      const b = new Set(climb(pratikEl));
+      card = a.find(x => b.has(x)) || null;
+    }
+
+    if (!card && pratikEl) {
+      card = climb(pratikEl, 8).find(x => (x.className || "").toString().match(/card|panel|question|content/i)) || pratikEl.parentElement;
+    }
+
+    if (!card) {
+      const blocks = Array.from(doc.querySelectorAll("div"))
+        .filter(d => (d.className || "").toString().match(/card|panel|question/i));
+      card = blocks.sort((x, y) => (y.innerText || "").length - (x.innerText || "").length)[0] || null;
+    }
+
+    if (!card) return;
+
+    injectOpenEndedCard({ ctx, card, q });
+
   } catch (_) { /* no-op */ }
 }
 
@@ -1018,7 +1344,19 @@ export function installOpenEndedAutoInjector(ctx = {}, opts = {}) {
     const obs = new MutationObserver(() => ping());
     obs.observe(root, { childList: true, subtree: true });
 
-    window.__OEPRO_OBS = obs;
+    // SRS'de soru değişimi tıklama ile olabiliyor; ekstra ping (zararsız)
+try{
+  if (!window.__OEPRO_CLICK_PING_ON){
+    window.__OEPRO_CLICK_PING_ON = true;
+    document.addEventListener("click", () => {
+      setTimeout(() => {
+        try{ scanAndInjectOpenEnded(ctx, root); }catch(_){}
+      }, 0);
+    }, true);
+  }
+}catch(_){}
+
+window.__OEPRO_OBS = obs;
   } catch (_) { /* no-op */ }
 }
 

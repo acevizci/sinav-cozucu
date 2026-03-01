@@ -6,6 +6,55 @@ import { getChosenOptionId } from "./shuffle.js";
 const WRONG_BOOK_KEY = "sinav_v2_wrong_book_modular";
 const MAX_ITEMS = 1200;
 
+
+// ---------- Progress history (Open-ended quality over time) ----------
+// Stores a compact timeline per record for sparkline charts (wrong-book export / UI).
+// entry: { ts:number(ms), score?:number(0..1), quality?:number(0..5), ef?:number, source?:string }
+const MAX_PROGRESS = 40;
+function pushProgress(rec, entry){
+  try{
+    if (!rec) return;
+    if (!rec.progress || !Array.isArray(rec.progress)) rec.progress = [];
+    const e = entry && typeof entry === "object" ? { ...entry } : null;
+    if (!e) return;
+    if (!Number.isFinite(Number(e.ts))) e.ts = Date.now();
+    // normalize
+    if (e.score != null && Number.isFinite(Number(e.score))) {
+      let s = Number(e.score);
+      if (s > 1) s = s / 100;
+      e.score = Math.max(0, Math.min(1, s));
+    } else {
+      delete e.score;
+    }
+    if (e.quality != null && Number.isFinite(Number(e.quality))) {
+      e.quality = Math.max(0, Math.min(5, Number(e.quality)));
+    } else {
+      delete e.quality;
+    }
+    if (e.ef != null && Number.isFinite(Number(e.ef))) e.ef = Number(e.ef);
+    else delete e.ef;
+    if (typeof e.source !== "string") delete e.source;
+
+    // de-dupe: if last entry is within 2s and same score/quality, overwrite
+    const last = rec.progress[rec.progress.length - 1];
+    if (last && Math.abs((Number(e.ts)||0) - (Number(last.ts)||0)) < 2000) {
+      const sameScore = (last.score == null && e.score == null) || (Number(last.score) === Number(e.score));
+      const sameQ = (last.quality == null && e.quality == null) || (Number(last.quality) === Number(e.quality));
+      if (sameScore && sameQ){
+        rec.progress[rec.progress.length - 1] = { ...last, ...e };
+      } else {
+        rec.progress.push(e);
+      }
+    } else {
+      rec.progress.push(e);
+    }
+
+    if (rec.progress.length > MAX_PROGRESS) {
+      rec.progress = rec.progress.slice(rec.progress.length - MAX_PROGRESS);
+    }
+  }catch(_){}
+}
+
 // ---------- Subject helpers (UI/analytics) ----------
 function normSubject(s){
   const t = String(s || "Genel").trim();
@@ -352,18 +401,10 @@ export function buildWrongOnlyParsed({ limit=60, onlyDue=false, fallbackAll=true
   items = items.slice(0, limit);
 
   const questions = items.map((it, idx) => {
-    const hasAnyOptions =
-      (it.q?.optionsByLetter && Object.keys(it.q.optionsByLetter || {}).length > 0) ||
-      (Array.isArray(it.q?.options) && it.q.options.length > 0) ||
-      (Array.isArray(it.q?.choices) && it.q.choices.length > 0);
-
     const isOE = it.q?.kind === "openEndedPro"
-      || !!it.q?.openEnded
       || String(it.yourId || "").startsWith("OPEN_ENDED")
       || it.status === "OPEN_ENDED_RETRY"
-      || it.status === "OPEN_ENDED"
-      // eski kayıtlar: şık yok + doğru seçenek yok → açık uçlu kabul et
-      || (!hasAnyOptions && !it.correctId);
+      || it.status === "OPEN_ENDED";
 
     return {
       n: idx + 1,
@@ -378,6 +419,13 @@ export function buildWrongOnlyParsed({ limit=60, onlyDue=false, fallbackAll=true
       ...(isOE ? {
         kind: "openEndedPro",
         openEnded: it.q?.openEnded || null,
+
+        // progress & analysis payloads (for SRS UI / export)
+        progress: Array.isArray(it.progress) ? it.progress : (Array.isArray(it.q?.progress) ? it.q.progress : []),
+        lastGrade: it.lastGrade ?? it.q?.lastGrade ?? null,
+        lastScore: (typeof it.lastScore === "number" ? it.lastScore : (typeof it.q?.lastScore === "number" ? it.q.lastScore : null)),
+        missing_points: Array.isArray(it.missing_points) ? it.missing_points : (Array.isArray(it.q?.missing_points) ? it.q.missing_points : []),
+        suggested_outline: it.suggested_outline || it.q?.suggested_outline || "",
       } : {}),
     };
   });
@@ -390,19 +438,15 @@ export function buildWrongOnlyParsed({ limit=60, onlyDue=false, fallbackAll=true
 
   const keyCount = Object.keys(answerKey).length;
 
-  // Open-ended meta flag (SRS tekrarında UI injector için)
-  const __hasOE = questions.some(q => q?.kind === "openEndedPro");
-
   return {
     title: subject ? `Tekrar • ${normSubject(subject)}` : (onlyDue ? "Tekrar (SRS)" : "Yanlış Defteri"),
     questions,
     answerKey,
     keyCount,
     mapOriginalToDisplay: {},
-    meta: {
+    meta: { 
         isSmartRetry: true,
-        source: "wrong_book",
-        openEndedPro: __hasOE
+        source: "wrong_book" 
     }
   };
 }
@@ -649,6 +693,9 @@ export function addOpenEndedProToWrongBookFromExam({ parsed, answersMap, thresho
     rec.wrongCount = (rec.wrongCount || 0) + 1;
     sm2Apply(rec, 1);
 
+    // progress timeline (score/ef)
+    pushProgress(rec, { ts: Date.now(), score: rec.lastScore, quality: 1, ef: rec?.srs?.sm2?.ef, source: "practice" });
+
     book[key] = rec;
   }
 
@@ -681,6 +728,12 @@ export function setSrsQualityByQuestion(q, quality, reviewId){
   }
 
   sm2Apply(rec, quality);
+
+  // progress timeline for SRS reviews (quality/ef). Only for open-ended records.
+  try{
+    const isOE = (q?.kind === "openEndedPro") || (rec?.q?.kind === "openEndedPro") || (String(rec?.status||"").startsWith("OPEN_ENDED"));
+    if (isOE) pushProgress(rec, { ts: Date.now(), quality: Number(quality)||0, ef: rec?.srs?.sm2?.ef, source: "review" });
+  }catch(_){ }
   if (rid) rec.srs.lastReviewId = rid;
 
   book[key] = rec;

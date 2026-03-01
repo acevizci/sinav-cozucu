@@ -79,13 +79,6 @@ export function bindEvents(ctx = {}) {
   const listFolderBooklets = ctx.listFolderBooklets;
   const fetchDriveFileAsFileOrText = ctx.fetchDriveFileAsFileOrText;
 
-  // ================= OPEN-ENDED PRO: AUTO-INJECT (SAFE) =================
-  // Tekrar (SRS) dahil, DOM geç render edilse bile açık uçlu kartları textarea+AI UI'ye çevirir.
-  try {
-    window.installOpenEndedAutoInjector?.({ state }, { rootId: "examArea" });
-  } catch (_) {}
-
-
 /* ================= EVENTS ================= */
 el("btnStart").onclick = startExam;
 el("btnFinish").onclick = finishExam;
@@ -214,8 +207,6 @@ safeBind("btnWrongMode", () => {
   state.mode="prep";
   state.answers.clear();
   paintAll();
-  // open-ended kartlar için ekstra anlık tarama (zararsız)
-  try { setTimeout(() => window.scanAndInjectOpenEnded?.({ state }, document.getElementById("examArea") || document), 0); } catch (_) {}
 });
 
 
@@ -230,6 +221,16 @@ safeBind("btnSrsDash", () => {
 // ✅ Export Wrong Book (REPORT)
 // =============================
 safeBind("btnExportWrongBook", () => {
+  // local-safe escapeHtml (export scope için)
+  const escapeHtml = (s) => {
+    return String(s || "")
+      .replace(/&/g,"&amp;")
+      .replace(/</g,"&lt;")
+      .replace(/>/g,"&gt;")
+      .replace(/"/g,"&quot;")
+      .replace(/'/g,"&#39;");
+  };
+
   const data = exportWrongBook();
   if (!data || !data.items || data.items.length === 0) {
     showWarn({id:"WRONG_BOOK_ALL_EMPTY"});
@@ -310,6 +311,49 @@ safeBind("btnExportWrongBook", () => {
   // ---------- Summary meta ----------
   const now = new Date().toLocaleDateString("tr-TR");
   const totalWrongUnique = reportItems.length;
+
+  // --- OPEN-ENDED DASHBOARD (avg last quality & formda count) ---
+  const _oeItems = reportItems.filter(it => (it?.q?.kind === "openEndedPro") || String(it?.status||"").startsWith("OPEN_ENDED"));
+  const _oeLastQual = _oeItems.map(it => {
+    const prog = it?.progress || it?.q?.progress || [];
+    const pts = (Array.isArray(prog)?prog:[]).map(p => _sparkY(p)).filter(v => typeof v==="number" && Number.isFinite(v));
+    return pts.length ? pts[pts.length-1] : null;
+  }).filter(v => v!=null);
+  const oeAvgLast = _oeLastQual.length ? (_oeLastQual.reduce((a,b)=>a+b,0) / _oeLastQual.length) : null;
+
+  const oeFormdaCount = _oeItems.map(it => {
+    const prog = it?.progress || it?.q?.progress || [];
+    const pts = (Array.isArray(prog)?prog:[]).map(p => _sparkY(p)).filter(v => typeof v==="number" && Number.isFinite(v));
+    if (pts.length < 6) return false;
+    let ok = true;
+    for (let i=pts.length-1, c=0; i>=1 && c<5; i--, c++){
+      if (!(pts[i] > pts[i-1])) { ok = false; break; }
+    }
+    return ok;
+  }).filter(Boolean).length;
+
+  const oeDashHtml = `
+    <div class="card" style="margin-bottom:22px;">
+      <div class="panel-section-title" style="margin-bottom:14px;">OPEN-ENDED DASHBOARD</div>
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
+        <div style="font-size:12px; color:var(--muted); font-weight:800;">Ortalama Son Kalite</div>
+        <div style="font-size:14px; font-weight:900; color:#fff;">
+          ${oeAvgLast != null ? Math.round(oeAvgLast*100) + "%" : "—"}
+        </div>
+      </div>
+      <div class="bar-bg" style="margin-top:10px;">
+        <div class="bar-fill" style="width:${oeAvgLast != null ? Math.max(2, Math.min(100, Math.round(oeAvgLast*100))) : 2}%;"></div>
+      </div>
+      <div class="divider"></div>
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
+        <div style="font-size:12px; color:var(--muted); font-weight:800;">🏆 Formda (5 artış)</div>
+        <div style="font-size:14px; font-weight:900; color:#86efac;">${oeFormdaCount}</div>
+      </div>
+      <div style="margin-top:10px; font-size:11px; color:rgba(255,255,255,.72); line-height:1.45;">
+        Açık uçlu sorularda son kalite ortalaman ve son 5 değerlendirmesi üst üste yükselen (Formda) soru sayısı.
+      </div>
+    </div>
+  `;
 
   // --- 1. VERİ ANALİZİ ---
   const subjectMap = {};
@@ -447,7 +491,39 @@ safeBind("btnExportWrongBook", () => {
       body { flex-direction: column; align-items: center; }
       .panel { position: relative; top: 0; width: 100%; max-width: 700px; margin-bottom: 25px; }
     }
-  `;
+  
+
+/* Open-ended momentum chips */
+@keyframes oeDeltaPop {
+  0% { transform: translateY(6px) scale(.96); opacity: 0; }
+  30% { transform: translateY(0px) scale(1.05); opacity: 1; }
+  100% { transform: translateY(0px) scale(1); opacity: 1; }
+}
+.oeDeltaChip{
+  display:inline-flex; align-items:center; gap:6px;
+  padding: 5px 10px; border-radius: 999px;
+  font-size: 12px; font-weight: 900;
+  border: 1px solid rgba(168,85,247,.32);
+  background: rgba(168,85,247,.12);
+  color: #e9d5ff;
+  animation: oeDeltaPop 650ms ease-out 1;
+  white-space: nowrap;
+}
+.oeDeltaChip--down{
+  border-color: rgba(239,68,68,.35);
+  background: rgba(239,68,68,.12);
+  color: #fecaca;
+}
+.oeFormdaBadge{
+  display:inline-flex; align-items:center; gap:6px;
+  padding: 5px 10px; border-radius: 999px;
+  font-size: 12px; font-weight: 900;
+  border: 1px solid rgba(34,197,94,.35);
+  background: rgba(34,197,94,.12);
+  color: #86efac;
+  white-space: nowrap;
+}
+`;
 
   // --- helpers: multi-id support ---
   const toLetterSet = (v) => {
@@ -456,6 +532,175 @@ safeBind("btnExportWrongBook", () => {
     const letters = s.match(/[A-F]/g) || [];
     return new Set(letters);
   };
+
+
+// --- Open-ended progress sparkline (score/quality over time) ---
+const _fmtTR = (ts) => {
+  try { return new Date(Number(ts)||0).toLocaleString("tr-TR", { dateStyle:"short", timeStyle:"short" }); }
+  catch { return String(ts||""); }
+};
+
+function _sparkY(pt){
+// Prefer score (0..1). If missing, map quality (0..5) -> 0..1
+  if (pt && typeof pt === "object") {
+    if (typeof pt.score === "number" && Number.isFinite(pt.score)) return Math.max(0, Math.min(1, pt.score));
+    if (typeof pt.quality === "number" && Number.isFinite(pt.quality)) return Math.max(0, Math.min(1, pt.quality / 5));
+  }
+  return null;
+  }
+
+const _renderSparkline = (progress = []) => {
+  try{
+    const arr = Array.isArray(progress) ? progress : [];
+    const pts = arr.map(p => ({ ts: Number(p?.ts)||0, y: _sparkY(p) })).filter(p => p.ts && p.y != null);
+    if (pts.length < 2) return "";
+    pts.sort((a,b)=>a.ts-b.ts);
+
+    const w = 220, h = 44, pad = 4;
+    const minT = pts[0].ts, maxT = pts[pts.length-1].ts;
+
+    const dx = (t) => {
+      if (maxT === minT) return pad;
+      return pad + ((t - minT) / (maxT - minT)) * (w - pad*2);
+    };
+    const dy = (y) => pad + (1 - y) * (h - pad*2);
+
+    const d = pts.map((p,i)=>`${i===0?'M':'L'} ${dx(p.ts).toFixed(2)} ${dy(p.y).toFixed(2)}`).join(" ");
+    const last = pts[pts.length-1];
+    const tip = pts.slice(-6).map(p => `${_fmtTR(p.ts)}: ${(p.y*100).toFixed(0)}%`).join("&#10;");
+
+    return `
+      <div style="margin-top:12px; padding:12px; border-radius:14px; background:rgba(255,255,255,0.03); border:1px solid var(--border);">
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:10px;">
+          <div style="font-size:11px; font-weight:900; letter-spacing:.8px; text-transform:uppercase; color:var(--muted);">
+            Cevap Kalitesi (Zaman)
+          </div>
+          <div style="font-size:11px; color:#fff; font-weight:800;">
+            Son: ${(last.y*100).toFixed(0)}%
+          </div>
+        </div>
+        <svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" role="img" aria-label="kalite grafiği"
+             style="display:block; width:100%; max-width:${w}px; height:auto;">
+          <title>${tip}</title>
+          <path d="${d}" fill="none" stroke="rgba(168,85,247,0.95)" stroke-width="2.2" stroke-linecap="round"/>
+          <circle cx="${dx(last.ts).toFixed(2)}" cy="${dy(last.y).toFixed(2)}" r="3.5" fill="rgba(255,255,255,0.95)"/>
+        </svg>
+      </div>
+    `;
+  }catch(_){
+    return "";
+  }
+};
+
+
+const _normalizeEf01 = (ef) => {
+  if (ef == null || !Number.isFinite(Number(ef))) return null;
+  const v = Number(ef);
+  const lo = 1.3, hi = 3.2; // SM-2 typical range
+  const y = (v - lo) / (hi - lo);
+  return Math.max(0, Math.min(1, y));
+};
+
+const _calcMomentum = (qualitySeries01 = []) => {
+  const q = qualitySeries01.filter(v => typeof v === "number" && Number.isFinite(v));
+  if (q.length < 2) return { deltaPct: 0, streakUp: 0, isFormda: false };
+  const last = q[q.length - 1];
+  const prev = q[q.length - 2];
+  const deltaPct = Math.round((last - prev) * 100);
+
+  let streakUp = 0;
+  for (let i = q.length - 1; i >= 1 && streakUp < 5; i--) {
+    if (q[i] > q[i - 1]) streakUp++;
+    else break;
+  }
+  return { deltaPct, streakUp, isFormda: streakUp >= 5 };
+};
+
+// Dual-line: Quality + EF
+const _renderSparklineDual = (progress = []) => {
+  try{
+    const arr = Array.isArray(progress) ? progress : [];
+    const pts = arr.map(p => ({
+      ts: Number(p?.ts) || 0,
+      qy: _sparkY(p),
+      ef: (typeof p?.ef === "number" && Number.isFinite(p.ef)) ? Number(p.ef) : null
+    })).filter(p => p.ts && (p.qy != null || p.ef != null));
+
+    if (pts.length < 2) return { html:"", deltaHtml:"", isFormda:false };
+
+    pts.sort((a,b)=>a.ts-b.ts);
+
+    // forward-fill (keeps sparse logs usable)
+    let lastQ=null, lastEf=null;
+    for (const p of pts){
+      if (p.qy != null) lastQ = p.qy; else p.qy = lastQ;
+      if (p.ef != null) lastEf = p.ef; else p.ef = lastEf;
+    }
+
+    const qSeries = pts.map(p=>p.qy).filter(v=>v!=null);
+    const stats = _calcMomentum(qSeries);
+
+    const delta = Number(stats.deltaPct || 0);
+    const deltaHtml = (Number.isFinite(delta) && delta !== 0)
+      ? `<span class="oeDeltaChip ${delta<0?'oeDeltaChip--down':''}">🔥 ${delta>0?'+':''}${delta}%</span>`
+      : "";
+
+    const w=240, h=54, pad=5;
+    const minT=pts[0].ts, maxT=pts[pts.length-1].ts;
+    const dx = (t)=> (maxT===minT) ? pad : pad + ((t-minT)/(maxT-minT))*(w-pad*2);
+    const dy = (y01)=> pad + (1-y01)*(h-pad*2);
+
+    const qPts = pts.filter(p=>p.qy!=null).map(p=>({ts:p.ts,y:p.qy}));
+    const efPts = pts.filter(p=>p.ef!=null).map(p=>({ts:p.ts,y:_normalizeEf01(p.ef)})).filter(p=>p.y!=null);
+
+    const mkPath = (arr)=>arr.map((p,i)=>`${i===0?'M':'L'} ${dx(p.ts).toFixed(2)} ${dy(p.y).toFixed(2)}`).join(" ");
+    const qPath = qPts.length>=2 ? mkPath(qPts) : "";
+    const efPath = efPts.length>=2 ? mkPath(efPts) : "";
+
+    const last = qPts[qPts.length-1];
+    const tip = pts.slice(-8).map(p => {
+      const qv = (p.qy!=null) ? `${Math.round(p.qy*100)}%` : "-";
+      const efv = (p.ef!=null) ? `EF ${Number(p.ef).toFixed(2)}` : "-";
+      return `${_fmtTR(p.ts)}: ${qv} • ${efv}`;
+    }).join("&#10;");
+
+    const html = `
+      <div style="margin-top:12px; padding:12px; border-radius:14px; background:rgba(255,255,255,0.03); border:1px solid var(--border);">
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:10px;">
+          <div style="display:flex; flex-direction:column; gap:4px;">
+            <div style="font-size:11px; font-weight:900; letter-spacing:.8px; text-transform:uppercase; color:var(--muted);">
+              Cevap Kalitesi (Zaman)
+            </div>
+            <div style="display:flex; gap:10px; font-size:11px; color:rgba(255,255,255,.82);">
+              <span style="display:inline-flex; align-items:center; gap:6px;">
+                <span style="width:10px;height:2px;background:rgba(168,85,247,.95);display:inline-block;border-radius:2px;"></span>
+                Kalite
+              </span>
+              <span style="display:inline-flex; align-items:center; gap:6px;">
+                <span style="width:10px;height:2px;background:rgba(59,130,246,.95);display:inline-block;border-radius:2px;"></span>
+                EF
+              </span>
+            </div>
+          </div>
+          <div style="font-size:11px; color:#fff; font-weight:800;">
+            Son: ${(last.y*100).toFixed(0)}%
+          </div>
+        </div>
+
+        <svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" role="img" aria-label="kalite ve ef grafiği"
+             style="display:block; width:100%; max-width:${w}px; height:auto;">
+          <title>${tip}</title>
+          ${qPath ? `<path d="${qPath}" fill="none" stroke="rgba(168,85,247,0.95)" stroke-width="2.3" stroke-linecap="round"/>` : ``}
+          ${efPath ? `<path d="${efPath}" fill="none" stroke="rgba(59,130,246,0.95)" stroke-width="2.0" stroke-linecap="round" stroke-dasharray="4 3"/>` : ``}
+          <circle cx="${dx(last.ts).toFixed(2)}" cy="${dy(last.y).toFixed(2)}" r="3.4" fill="rgba(255,255,255,0.95)"/>
+        </svg>
+      </div>
+    `;
+    return { html, deltaHtml, isFormda: !!stats.isFormda };
+  }catch(_){
+    return { html:"", deltaHtml:"", isFormda:false };
+  }
+};
 
   // --- 4. SORU SATIRLARI ---
   const rows = reportItems.map((item, idx) => {
@@ -487,40 +732,114 @@ safeBind("btnExportWrongBook", () => {
     let optionsHtml = "";
 
     if (isOpenEnded) {
-      // Açık uçlu: olay metni + soru metni + kullanıcının cevabı
+      // Açık uçlu: olay metni + alt soru + kullanıcının cevabı + AI analiz kartı
       const oe = q.openEnded || {};
       const caseText = String(oe.caseText || "").trim();
       const subQ = oe.subQuestion ? String(oe.subQuestion.text || "").trim() : "";
+
       // userAnswer: yeni kayıtta direkt, eski kayıtta yourId'den çıkar
       const rawYourId = String(item.yourId || "");
       const legacyAnswer = rawYourId.startsWith("OPEN_ENDED:") ? rawYourId.slice("OPEN_ENDED:".length) : "";
       const userAnswer = String(item.userAnswer || item.lastAnswer || legacyAnswer).trim();
+
+      // grade: { score, confidence, brief_feedback, missing_points[], outline[] }
       const grade = item.lastGrade || null;
+      const _spark = _renderSparklineDual(item.progress || q.progress || []);
+      const sparkHtml = _spark?.html || "";
+      const deltaHtml = _spark?.deltaHtml || "";
+      const isFormda = !!(_spark?.isFormda);
+
+      // SRS EF (gelişim metriği)
+      const ef = Number(item?.srs?.sm2?.ef);
+      const efOk = Number.isFinite(ef) && ef > 0;
+
+      const efLabel = (v) => {
+        const x = Number(v);
+        if (!Number.isFinite(x)) return { t:"EF ?", emo:"❔", cls:"oe-chip-warn" };
+        if (x >= 2.70) return { t:"Usta", emo:"🧙‍♂️", cls:"oe-chip-good" };
+        if (x >= 2.30) return { t:"İyi", emo:"💪", cls:"oe-chip-good" };
+        if (x >= 2.00) return { t:"Gelişiyor", emo:"🌱", cls:"oe-chip-warn" };
+        return { t:"Zorlanıyor", emo:"😵‍💫", cls:"oe-chip-bad" };
+      };
+
+      const fmtEf = (v) => {
+        const x = Number(v);
+        if (!Number.isFinite(x)) return "";
+        return x.toFixed(2);
+      };
+
+      const gScore = grade && Number.isFinite(Number(grade.score)) ? Math.round(Number(grade.score)) : null;
+      const gConf  = grade && Number.isFinite(Number(grade.confidence)) ? Math.round(Math.max(0, Math.min(1, Number(grade.confidence))) * 100) : null;
+
+      const miss = grade && Array.isArray(grade.missing_points) ? grade.missing_points : [];
+      const outl = grade && Array.isArray(grade.outline) ? grade.outline : [];
+
+      const efMeta = efLabel(ef);
+      const topMiss = miss.slice(0, 3).map(x => String(x || "").trim()).filter(Boolean);
 
       optionsHtml = `
         <div style="margin-top:4px;">
           ${caseText ? `
             <details style="margin-bottom:12px; border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:12px; background:rgba(0,0,0,0.2);">
               <summary style="cursor:pointer; color:#d8b4fe; font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px;">📋 Olay Metni</summary>
-              <div style="margin-top:10px; font-size:13px; color:#d1d1d6; line-height:1.6;">${caseText.replace(/\n/g, "<br>")}</div>
+              <div style="margin-top:10px; font-size:13px; color:#d1d1d6; line-height:1.6;">${escapeHtml(caseText).replace(/\n/g, "<br>")}</div>
             </details>
           ` : ""}
-          ${subQ ? `<div style="font-size:13px; font-weight:600; color:#e2e8f0; margin-bottom:10px; padding:10px 12px; background:rgba(168,85,247,0.08); border-radius:10px; border-left:3px solid #a855f7;">❓ ${subQ}</div>` : ""}
+
+          ${subQ ? `<div style="font-size:13px; font-weight:600; color:#e2e8f0; margin-bottom:10px; padding:10px 12px; background:rgba(168,85,247,0.08); border-radius:10px; border-left:3px solid #a855f7;">❓ ${escapeHtml(subQ)}</div>` : ""}
+
           ${userAnswer ? `
             <div style="margin-top:8px;">
               <div style="font-size:10px; font-weight:800; color:var(--muted); text-transform:uppercase; margin-bottom:6px;">✏️ Cevabınız</div>
-              <div style="font-size:13px; color:#d1d1d6; line-height:1.6; padding:12px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:10px;">${userAnswer.replace(/\n/g, "<br>")}</div>
+              <div style="font-size:13px; color:#d1d1d6; line-height:1.6; padding:12px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:10px;">${escapeHtml(userAnswer).replace(/\n/g, "<br>")}</div>
             </div>
           ` : `<div style="font-size:12px; color:var(--muted); font-style:italic; padding:10px; border:1px dashed rgba(255,255,255,0.1); border-radius:10px;">Cevap girilmedi</div>`}
-          ${grade ? `
-            <div style="margin-top:10px; padding:12px; border-radius:10px; background:rgba(168,85,247,0.08); border:1px solid rgba(168,85,247,0.2);">
-              <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:6px;">
-                <span style="padding:4px 10px; border-radius:999px; font-size:12px; font-weight:700; background:${Number(grade.score)>=80?"rgba(74,222,128,0.15)":Number(grade.score)>=50?"rgba(251,191,36,0.15)":"rgba(248,113,113,0.15)"}; color:${Number(grade.score)>=80?"#4ade80":Number(grade.score)>=50?"#fbbf24":"#f87171"}; border:1px solid currentColor;">Puan: ${Math.round(Number(grade.score||0))}</span>
-                <span style="font-size:11px; color:var(--muted);">✨ AI Değerlendirmesi</span>
+
+          ${(grade || efOk) ? `
+            <div style="margin-top:12px; padding:14px; border-radius:14px; background:rgba(168,85,247,0.08); border:1px solid rgba(168,85,247,0.22);">
+              <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-bottom:10px;">
+                <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                  ${gScore != null ? `<span style="padding:5px 10px; border-radius:999px; font-size:12px; font-weight:800; background:${gScore>=80?"rgba(74,222,128,0.15)":gScore>=50?"rgba(251,191,36,0.15)":"rgba(248,113,113,0.15)"}; color:${gScore>=80?"#4ade80":gScore>=50?"#fbbf24":"#f87171"}; border:1px solid currentColor;">Puan: ${gScore}</span>` : ``}
+                  ${gConf != null ? `<span style="padding:5px 10px; border-radius:999px; font-size:12px; font-weight:700; border:1px solid rgba(255,255,255,0.12); background:rgba(255,255,255,0.05); color:rgba(255,255,255,.9);">Güven: ${gConf}%</span>` : ``}
+                  ${efOk ? `<span style="padding:5px 10px; border-radius:999px; font-size:12px; font-weight:800; border:1px solid rgba(255,255,255,0.12); background:rgba(0,0,0,0.22); color:rgba(255,255,255,.92);">${efMeta.emo} ${efMeta.t} • EF ${fmtEf(ef)}</span>` : ``}
+                  ${deltaHtml || ""}
+                  ${isFormda ? `<span class="oeFormdaBadge">🏆 Formda</span>` : ``}
+                </div>
+                <div style="font-size:11px; color:rgba(255,255,255,.55); font-weight:700; letter-spacing:.3px;">🎯 Açık Uçlu Analiz Kartı</div>
               </div>
-              ${grade.brief_feedback ? `<div style="font-size:13px; color:#d1d1d6; line-height:1.5;">${grade.brief_feedback}</div>` : ""}
+
+              ${grade?.brief_feedback ? `<div style="font-size:13px; color:#d1d1d6; line-height:1.55; margin-bottom:10px;">${escapeHtml(String(grade.brief_feedback))}</div>` : ``}
+
+              ${topMiss.length ? `
+                <div style="margin:10px 0 12px; padding:10px 12px; border-radius:12px; background:rgba(0,0,0,0.20); border:1px dashed rgba(255,255,255,0.12);">
+                  <div style="font-size:10px; font-weight:900; color:rgba(255,255,255,.65); text-transform:uppercase; margin-bottom:6px;">Bugünlük Mini Görev</div>
+                  <div style="font-size:12px; color:#e5e7eb; line-height:1.5;">
+                    ${escapeHtml(topMiss[0] || "")}${topMiss[1] ? ` • ${escapeHtml(topMiss[1])}` : ""}${topMiss[2] ? ` • ${escapeHtml(topMiss[2])}` : ""}
+                  </div>
+                </div>
+              ` : ""}
+
+              ${sparkHtml || ""}
+
+              ${(miss.length || outl.length) ? `
+        <details style="border:1px solid rgba(255,255,255,0.10); border-radius:12px; padding:12px; background:rgba(0,0,0,0.18);">
+                  <summary style="cursor:pointer; color:rgba(255,255,255,.9); font-weight:800;">🧩 Detaylar (Eksik Noktalar & İskelet)</summary>
+                  <div style="height:10px"></div>
+
+                  <div style="font-size:11px; font-weight:900; color:rgba(255,255,255,.65); text-transform:uppercase; margin-bottom:8px;">Eksik Noktalar</div>
+                  <ul style="margin:0 0 12px 18px; padding:0; color:rgba(255,255,255,.75); font-size:13px; line-height:1.55;">
+                    ${miss.slice(0, 12).map(x => `<li>${escapeHtml(String(x))}</li>`).join("") || "<li>—</li>"}
+                  </ul>
+
+                  <div style="font-size:11px; font-weight:900; color:rgba(255,255,255,.65); text-transform:uppercase; margin:10px 0 8px;">Önerilen Cevap İskeleti</div>
+                  <ul style="margin:0 0 0 18px; padding:0; color:rgba(255,255,255,.75); font-size:13px; line-height:1.55;">
+                    ${outl.slice(0, 12).map(x => `<li>${escapeHtml(String(x))}</li>`).join("") || "<li>—</li>"}
+                  </ul>
+                </details>
+              ` : ``}
             </div>
           ` : ""}
+
         </div>
       `;
     } else {
@@ -673,6 +992,7 @@ safeBind("btnExportWrongBook", () => {
       </div>
 
       <div class="panel right-panel">
+        ${oeDashHtml}
         <div class="panel-section-title">📊 KONU DAĞILIMI</div>
         ${chartRows}
         <div class="divider"></div>
